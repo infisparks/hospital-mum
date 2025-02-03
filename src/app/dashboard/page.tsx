@@ -151,7 +151,7 @@ const Home: NextPage = () => {
           <section className="mt-6">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="p-6 border-b border-gray-100">
-                <h2 className="text-xl font-bold text-gray-800">Today's Appointments</h2>
+                <h2 className="text-xl font-bold text-gray-800">Todays Appointments</h2>
                 <p className="text-sm text-gray-500 mt-1">Manage your appointments and patient schedules</p>
               </div>
               <div className="p-6">
