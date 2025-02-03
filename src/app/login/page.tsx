@@ -65,7 +65,7 @@ const Login: React.FC = () => {
         </button>
       </form>
       <p style={{ marginTop: "10px" }}>
-        Don't have an account? <a href="/register">Register</a>
+        Dont have an account? <a href="/register">Register</a>
       </p>
     </div>
   );
