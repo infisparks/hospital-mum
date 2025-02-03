@@ -1,18 +1,20 @@
-// pages/register.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
 import { auth } from "../../../firebaseconfig";
-import { createUserWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+} from "firebase/auth";
 import { getDatabase, ref, set } from "firebase/database";
 import { useRouter } from "next/navigation";
 
 const Register: React.FC = () => {
   // State for form fields
-  const [clinicName, setClinicName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [clinicLocation, setClinicLocation] = useState("");
+  const [clinicName, setClinicName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [clinicLocation, setClinicLocation] = useState<string>("");
   const router = useRouter();
 
   // If already logged in, redirect to dashboard.
@@ -25,11 +27,17 @@ const Register: React.FC = () => {
     return () => unsubscribe();
   }, [router]);
 
-  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleRegister = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
     try {
       // Create the user with email and password
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
       const user = userCredential.user;
 
       // Store additional clinic details in the Realtime Database
@@ -41,9 +49,15 @@ const Register: React.FC = () => {
       });
 
       router.push("/dashboard");
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      alert(error.message);
+    } catch (error: unknown) {
+      // Use a type guard to check if error is an instance of Error
+      if (error instanceof Error) {
+        console.error("Registration error:", error);
+        alert(error.message);
+      } else {
+        console.error("Registration error:", error);
+        alert("An unknown error occurred during registration.");
+      }
     }
   };
 

@@ -1,13 +1,15 @@
-// pages/login.tsx
 "use client";
 import React, { useState, useEffect } from "react";
 import { auth } from "../../../firebaseconfig";
-import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
-import { useRouter } from "next/router";
+import {
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const router = useRouter();
 
   // If already logged in, redirect to dashboard.
@@ -25,9 +27,14 @@ const Login: React.FC = () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
-    } catch (error: any) {
-      console.error("Login error:", error);
-      alert(error.message);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Login error:", error);
+        alert(error.message);
+      } else {
+        console.error("Login error:", error);
+        alert("An unknown error occurred during login.");
+      }
     }
   };
 
@@ -58,7 +65,7 @@ const Login: React.FC = () => {
         </button>
       </form>
       <p style={{ marginTop: "10px" }}>
-        Dont have an account? <a href="/register">Register</a>
+        Don't have an account? <a href="/register">Register</a>
       </p>
     </div>
   );
