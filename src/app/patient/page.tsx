@@ -94,7 +94,6 @@ type AllergyItem = {
 };
 
 // Drug categories, each with its own possible sub‐items
-// (these items show up as “pills”; selecting them adds them to the table)
 const DRUG_CATEGORIES = [
   {
     category: "Antimicrobial Agents",
@@ -183,7 +182,7 @@ const FOOD_ALLERGIES_LIST = [
 ];
 
 // -----------------------------------------------------------------------------
-// 3. Main Form data
+// 3. Main Form Data Structures
 // -----------------------------------------------------------------------------
 
 type FormData = {
@@ -248,7 +247,7 @@ type FormData = {
   // Allergies
   // --- For Drug Allergies, we store an object of sub‐category => selected items
   drugAllergies: {
-    [category: string]: AllergyItem[]; // e.g. "Antimicrobial Agents": [...]
+    [category: string]: AllergyItem[];
   };
   drugAllergiesComment: string;
 
@@ -350,6 +349,11 @@ const Home: NextPage = () => {
   const { register, handleSubmit, reset, watch, setValue } =
     useForm<FormData>({ defaultValues });
 
+  // ---------------------------------------------------------------------------
+  // Define your clinic ID – you can replace this with a dynamic value later.
+  // ---------------------------------------------------------------------------
+  const clinicId = "clinic1";
+
   // Keep track of the active big tab
   const [tabIndex, setTabIndex] = useState(0);
 
@@ -361,10 +365,12 @@ const Home: NextPage = () => {
     if (id) setRecordId(id);
   }, [searchParams]);
 
-  // Fetch if editing
+  // ---------------------------------------------------------------------------
+  // 4A. Fetch if editing (using the clinic-based path)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!recordId) return;
-    get(child(ref(db), "patients/" + recordId))
+    get(child(ref(db), `clinic/${clinicId}/patientdetail/${recordId}`))
       .then((snap) => {
         if (snap.exists()) {
           const existingData = snap.val() as FormData;
@@ -374,18 +380,23 @@ const Home: NextPage = () => {
         }
       })
       .catch((err) => console.error(err));
-  }, [recordId, reset]);
+  }, [recordId, reset, clinicId]);
 
   // ---------------------------------------------------------------------------
-  // 4A. On form submit
+  // 4B. On form submit (using the clinic-based path)
   // ---------------------------------------------------------------------------
   const onSubmit = async (formValues: FormData) => {
     try {
       if (recordId) {
-        await set(ref(db, "patients/" + recordId), formValues);
+        await set(
+          ref(db, `clinic/${clinicId}/patientdetail/${recordId}`),
+          formValues
+        );
         alert("Updated existing patient: " + recordId);
       } else {
-        const newRef = push(ref(db, "patients"));
+        const newRef = push(
+          ref(db, `clinic/${clinicId}/patientdetail`)
+        );
         await set(newRef, formValues);
         alert("New patient created with id: " + newRef.key);
         router.replace("/");
@@ -398,11 +409,9 @@ const Home: NextPage = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // 4B. Photo upload
+  // 4C. Photo upload
   // ---------------------------------------------------------------------------
-  const handleImageUpload = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -415,7 +424,7 @@ const Home: NextPage = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // 4C. Voice commands
+  // 4D. Voice commands
   // ---------------------------------------------------------------------------
   const voiceCommands = [
     {
@@ -540,7 +549,7 @@ const Home: NextPage = () => {
   };
 
   // ---------------------------------------------------------------------------
-  // 4D. Tabs
+  // 4E. Tabs
   // ---------------------------------------------------------------------------
   const renderTabButtons = () => (
     <div className="flex gap-4 border-b mb-4 pb-2 text-black">
@@ -1427,16 +1436,10 @@ const Home: NextPage = () => {
     const categoryList = drugAllergies[category] || [];
     const idx = categoryList.findIndex((x) => x.name === itemName);
     if (idx >= 0) {
-      // remove
       const newArr = [...categoryList];
       newArr.splice(idx, 1);
-      setValue(
-        `drugAllergies.${category}`,
-        newArr,
-        { shouldDirty: true }
-      );
+      setValue(`drugAllergies.${category}`, newArr, { shouldDirty: true });
     } else {
-      // add
       const newItem: AllergyItem = {
         name: itemName,
         duration: "",
