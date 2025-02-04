@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { NextPage } from "next";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -1424,7 +1424,6 @@ const Home: NextPage = () => {
   // ---------------------------------------------------------------------------
   // 8. Render: Allergies tab (Drug, Contact, Food)
   // ---------------------------------------------------------------------------
-
   // Track which drug category is active (e.g. "Antimicrobial Agents")
   const [activeDrugCategory, setActiveDrugCategory] = useState<string>(
     DRUG_CATEGORIES[0].category
@@ -1552,7 +1551,6 @@ const Home: NextPage = () => {
         {/* DRUG ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Drug (Allergies)</h3>
-
           {/* Subcategory tabs: Antimicrobial, Antifungal, etc. */}
           <div className="flex gap-2 mb-2">
             {DRUG_CATEGORIES.map((cat) => (
@@ -1570,7 +1568,6 @@ const Home: NextPage = () => {
               </button>
             ))}
           </div>
-
           {/* Show the pills for the currently active category */}
           <div className="flex flex-wrap gap-2 mb-2">
             {DRUG_CATEGORIES.find((c) => c.category === activeDrugCategory)?.items.map(
@@ -1593,7 +1590,6 @@ const Home: NextPage = () => {
               }
             )}
           </div>
-
           {/* Table of selected items in this category */}
           {activeList.length > 0 && (
             <div className="overflow-auto">
@@ -1670,7 +1666,6 @@ const Home: NextPage = () => {
               </table>
             </div>
           )}
-
           {/* Overall comment for drug allergies */}
           <textarea
             placeholder="Drug Allergies Comment"
@@ -1890,70 +1885,72 @@ const Home: NextPage = () => {
   // 9. Render Page
   // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-gray-100 p-4 text-black">
-      <ToastContainer />
-      {/* Voice Control UI */}
-      <div className="max-w-screen-lg mx-auto mb-4 p-4 bg-white rounded shadow text-black">
-        <div className="flex justify-center mb-4 space-x-4">
-          <button
-            onClick={toggleListening}
-            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          >
-            {micListening ? (
-              <FaMicrophoneSlash className="mr-2" />
-            ) : (
-              <FaMicrophone className="mr-2" />
-            )}
-            {micListening ? "Stop Listening" : "Start Voice Control"}
-          </button>
-          <button
-            onClick={() => {
-              resetTranscript();
-              toast.info("Transcript cleared.");
-            }}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
-          >
-            Reset Transcript
-          </button>
-        </div>
-        {micListening && (
-          <div className="mb-4 p-4 bg-gray-100 rounded">
-            <h3 className="text-lg font-semibold mb-2">Listening...</h3>
-            <p className="text-gray-700">{transcript}</p>
+    <Suspense fallback={<div>Loading patient data...</div>}>
+      <div className="min-h-screen bg-gray-100 p-4 text-black">
+        <ToastContainer />
+        {/* Voice Control UI */}
+        <div className="max-w-screen-lg mx-auto mb-4 p-4 bg-white rounded shadow text-black">
+          <div className="flex justify-center mb-4 space-x-4">
+            <button
+              onClick={toggleListening}
+              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              {micListening ? (
+                <FaMicrophoneSlash className="mr-2" />
+              ) : (
+                <FaMicrophone className="mr-2" />
+              )}
+              {micListening ? "Stop Listening" : "Start Voice Control"}
+            </button>
+            <button
+              onClick={() => {
+                resetTranscript();
+                toast.info("Transcript cleared.");
+              }}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
+            >
+              Reset Transcript
+            </button>
           </div>
-        )}
-      </div>
-
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="max-w-screen-lg mx-auto bg-white p-4 rounded shadow text-black"
-      >
-        <h1 className="text-2xl font-bold mb-4 text-black">
-          Patient Registration &amp; Appointment Form
-        </h1>
-        {renderTabButtons()}
-        {tabIndex === 0 && renderPatientDetailsTab()}
-        {tabIndex === 1 && renderOtherDetailsTab()}
-        {tabIndex === 2 && renderHistoryTab()}
-        {tabIndex === 3 && renderAllergiesTab()}
-
-        <div className="flex justify-end mt-4 gap-2">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-4 py-2 border rounded bg-gray-200 text-black"
-          >
-            Close
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 border rounded bg-green-500 text-white"
-          >
-            {recordId ? "Update" : "Save"}
-          </button>
+          {micListening && (
+            <div className="mb-4 p-4 bg-gray-100 rounded">
+              <h3 className="text-lg font-semibold mb-2">Listening...</h3>
+              <p className="text-gray-700">{transcript}</p>
+            </div>
+          )}
         </div>
-      </form>
-    </div>
+
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="max-w-screen-lg mx-auto bg-white p-4 rounded shadow text-black"
+        >
+          <h1 className="text-2xl font-bold mb-4 text-black">
+            Patient Registration &amp; Appointment Form
+          </h1>
+          {renderTabButtons()}
+          {tabIndex === 0 && renderPatientDetailsTab()}
+          {tabIndex === 1 && renderOtherDetailsTab()}
+          {tabIndex === 2 && renderHistoryTab()}
+          {tabIndex === 3 && renderAllergiesTab()}
+
+          <div className="flex justify-end mt-4 gap-2">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-4 py-2 border rounded bg-gray-200 text-black"
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 border rounded bg-green-500 text-white"
+            >
+              {recordId ? "Update" : "Save"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Suspense>
   );
 };
 
