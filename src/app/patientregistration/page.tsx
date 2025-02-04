@@ -425,7 +425,7 @@ const PatientRegistration: NextPage = () => {
   ) => {
     // 1. Check if 'name' is already in the array; if not, add it
     const ophArr = watch("ophthalmicHistory") || [];
-    let newArr = [...ophArr];
+    const newArr = [...ophArr];
     let idx = newArr.findIndex((x) => x.name.toLowerCase() === name.toLowerCase());
     if (idx === -1) {
       // Add the item
