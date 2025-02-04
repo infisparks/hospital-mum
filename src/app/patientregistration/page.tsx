@@ -285,8 +285,8 @@ const defaultValues: FormData = {
   appointmentType: "Walk-in",
   appointmentDate: "",
   appointmentTime: "",
-  location: "",
-  consultant: "",
+  location: "ASHU EYE HOSPITAL",
+  consultant: "SHAHNAWAZ KAZI",
   consultantFreeze: false,
   visitType: "Review",
 
@@ -325,49 +325,6 @@ const defaultValues: FormData = {
   foodAllergies: [],
   foodAllergiesComment: "",
   otherAllergy: "",
-};
-
-/* ------------------------------------------------------------------
-  Helper Functions for DOB Parsing and Age Calculation
-------------------------------------------------------------------*/
-const parseSpokenDate = (spokenDate: string): string => {
-  // Expecting a format like "10jan2024"
-  const monthMap: { [key: string]: string } = {
-    jan: "01",
-    feb: "02",
-    mar: "03",
-    apr: "04",
-    may: "05",
-    jun: "06",
-    jul: "07",
-    aug: "08",
-    sep: "09",
-    oct: "10",
-    nov: "11",
-    dec: "12",
-  };
-  const match = spokenDate.match(/(\d{1,2})([a-zA-Z]{3})(\d{4})/);
-  if (match) {
-    const day = match[1].padStart(2, "0");
-    const monStr = match[2].toLowerCase();
-    const month = monthMap[monStr];
-    const year = match[3];
-    if (month) {
-      return `${year}-${month}-${day}`;
-    }
-  }
-  return "";
-};
-
-const calculateAge = (dobDate: Date) => {
-  const today = new Date();
-  let years = today.getFullYear() - dobDate.getFullYear();
-  let months = today.getMonth() - dobDate.getMonth();
-  if (months < 0) {
-    years--;
-    months += 12;
-  }
-  return { years, months };
 };
 
 /* ------------------------------------------------------------------
@@ -451,7 +408,8 @@ const PatientRegistration: NextPage = () => {
   /* ------------------------------------------------------------------
     3. ADVANCED SPEECH COMMANDS
   ------------------------------------------------------------------ */
-  // Navigation helper functions for tabs
+  // We define commands for each field. Additionally, we define commands
+  // for tab navigation, form submission, etc.
   const goToNextTab = () =>
     setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
   const goToPreviousTab = () =>
@@ -468,9 +426,7 @@ const PatientRegistration: NextPage = () => {
     // 1. Check if 'name' is already in the array; if not, add it
     const ophArr = watch("ophthalmicHistory") || [];
     const newArr = [...ophArr];
-    let idx = newArr.findIndex(
-      (x) => x.name.toLowerCase() === name.toLowerCase()
-    );
+    let idx = newArr.findIndex((x) => x.name.toLowerCase() === name.toLowerCase());
     if (idx === -1) {
       // Add the item
       newArr.push({
@@ -499,16 +455,16 @@ const PatientRegistration: NextPage = () => {
     );
   };
 
-  // Quick helper to handle singular/plural: “day”/“days” etc.
+  // Quick helper to handle singular/plural: “month”/“months” -> “Months”, etc.
   const convertUnit = (raw: string) => {
+    // just make sure we store either "Days", "Months", or "Years"
     const lower = raw.toLowerCase();
     if (lower.startsWith("day")) return "Days";
     if (lower.startsWith("month")) return "Months";
     if (lower.startsWith("year")) return "Years";
-    return "";
+    return ""; // fallback
   };
 
-  // New voice commands added below:
   const voiceCommands = [
     // -----------------------------
     // PATIENT DETAILS FIELDS
@@ -522,13 +478,13 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
-      // e.g. "middle name Jane"
-      command: /middle name (.*)/i,
-      callback: (value: string) => {
-        setValue("middleName", value.trim(), { shouldValidate: true });
-        toast.info("Middle Name set to: " + value);
+        // e.g. "first name John"
+        command: /middle name (.*)/i,
+        callback: (value: string) => {
+          setValue("middleName", value.trim(), { shouldValidate: true });
+          toast.info("First Name set to: " + value);
+        },
       },
-    },
     {
       command: /last name (.*)/i,
       callback: (value: string) => {
@@ -539,20 +495,24 @@ const PatientRegistration: NextPage = () => {
     {
       command: /mobile number (.*)/i,
       callback: (value: string) => {
+        // remove non-digits
         const sanitized = value.replace(/\D/g, "");
         setValue("mobileNumber", sanitized, { shouldValidate: true });
         toast.info("Mobile Number set to: " + sanitized);
       },
     },
     {
-      command: /second number (.*)/i,
-      callback: (value: string) => {
-        const sanitized = value.replace(/\D/g, "");
-        setValue("secondaryNumber", sanitized, { shouldValidate: true });
-        toast.info("Second Number set to: " + sanitized);
+        command: /second number (.*)/i,
+        callback: (value: string) => {
+          // remove non-digits
+          const sanitized = value.replace(/\D/g, "");
+          setValue("secondaryNumber", sanitized, { shouldValidate: true });
+          toast.info("Mobile Number set to: " + sanitized);
+        },
       },
-    },
     {
+      // e.g. "email john doe at example dot com"
+      // We’ll at least remove spaces. The user can correct the domain as needed
       command: /email (.*)/i,
       callback: (rawEmail: string) => {
         const sanitized = rawEmail.replaceAll(" ", "");
@@ -568,40 +528,14 @@ const PatientRegistration: NextPage = () => {
         toast.info("WhatsApp Number set to: " + sanitized);
       },
     },
-    // New command: Same as contact number
     {
-      command: /same as contact number/i,
-      callback: () => {
-        setValue("sameAsContact", true, { shouldValidate: true });
-        toast.info("Same as contact number checked.");
-      },
-    },
-    // New command: Gender selection (male, female, or transgender)
-    {
-      command: /gender (male|female|transgender)/i,
+      command: /dob (.*)/i,
       callback: (value: string) => {
-        const formatted = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-        setValue("gender", formatted, { shouldValidate: true });
-        toast.info("Gender set to: " + formatted);
-      },
-    },
-    // New command: DOB in spoken format e.g. "dob 10jan2024"
-    {
-      command: / (\d{1,2}[a-zA-Z]{3}\d{4})/i,
-      callback: (spokenDob: string) => {
-        const parsedDob = parseSpokenDate(spokenDob);
-        if (parsedDob) {
-          setValue("dob", parsedDob, { shouldValidate: true });
-          toast.info("DOB set to: " + parsedDob);
-          // Calculate age based on parsed DOB
-          const dobDate = new Date(parsedDob);
-          const age = calculateAge(dobDate);
-          setValue("ageYears", age.years.toString(), { shouldValidate: true });
-          setValue("ageMonths", age.months.toString(), { shouldValidate: true });
-          toast.info(`Age set to: ${age.years} years and ${age.months} months`);
-        } else {
-          toast.error("Failed to parse the spoken DOB.");
-        }
+        // e.g. "dob 2000-01-15" or "dob 2000 dash 01 dash 15"
+        // up to you how fancy you want to parse
+        const sanitized = value.replace(/ dash /g, "-").replace(/ /g, "");
+        setValue("dob", sanitized, { shouldValidate: true });
+        toast.info("DOB set to: " + sanitized);
       },
     },
     {
@@ -615,30 +549,15 @@ const PatientRegistration: NextPage = () => {
     {
       command: /appointment time (.*)/i,
       callback: (value: string) => {
+        // e.g. "appointment time 09 colon 30"
         const sanitized = value
           .replace(/ colon /g, ":")
-          .replace(/ /g, "");
+          .replace(/ /g, ""); // remove spaces
         setValue("appointmentTime", sanitized, { shouldValidate: true });
         toast.info("Appointment Time set to: " + sanitized);
       },
     },
-    // New command: Relationship
-    {
-      command: /relationship (.*)/i,
-      callback: (value: string) => {
-        setValue("relation", value.trim(), { shouldValidate: true });
-        toast.info("Relationship set to: " + value);
-      },
-    },
-    // New command: Patient Type (New or Old)
-    {
-      command: /patient (new|old)/i,
-      callback: (value: string) => {
-        const type = value.toLowerCase() === "new" ? "New" : "Old";
-        setValue("patientType", type, { shouldValidate: true });
-        toast.info("Patient type set to: " + type);
-      },
-    },
+
     // -----------------------------
     // NAVIGATION BETWEEN TABS
     // -----------------------------
@@ -671,6 +590,7 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
+      // user can say "next tab" to jump forward
       command: "next tab",
       callback: () => {
         goToNextTab();
@@ -678,14 +598,18 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
+      // user can say "previous tab" to jump back
       command: "previous tab",
       callback: () => {
         goToPreviousTab();
         toast.info("Moved to previous tab.");
       },
     },
+
     // -----------------------------
     // OPHTHALMIC COMMAND (ADVANCED)
+    // e.g. "ophthalmic select Glass right duration 5 months left duration 3 months"
+    // or "ophthalmic select Cataract right duration 2 day left duration 3 days"
     // -----------------------------
     {
       command:
@@ -700,16 +624,19 @@ const PatientRegistration: NextPage = () => {
         handleOphthalmicSelect(conditionName, rValue, rUnit, lValue, lUnit);
       },
     },
+
     // -----------------------------
     // SAVE, BACK
     // -----------------------------
     {
+      // e.g. "submit" or "save form"
       command: /(submit|save form)/i,
       callback: () => {
         handleSubmit(onSubmit)();
       },
     },
     {
+      // e.g. "back" or "go back"
       command: /(back|go back)/i,
       callback: () => {
         router.back();
@@ -717,6 +644,7 @@ const PatientRegistration: NextPage = () => {
     },
   ];
 
+  // The below is from react-speech-recognition
   const {
     transcript,
     resetTranscript,
@@ -1086,6 +1014,7 @@ const PatientRegistration: NextPage = () => {
             Reserved Slot for {watch("appointmentDate") || "DD-MM-YYYY"}
           </h4>
           <div className="flex flex-wrap gap-2 mt-2">
+            {/* Demo of reserved vs free slots */}
             {["03:08", "03:09", "03:34", "04:00", "06:15"].map((slot) => (
               <span
                 key={slot}
@@ -1859,6 +1788,7 @@ const PatientRegistration: NextPage = () => {
             </div>
           )}
 
+          {/* Overall comment for drug allergies */}
           <textarea
             placeholder="Drug Allergies Comment"
             {...register("drugAllergiesComment")}
