@@ -15,7 +15,8 @@ import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
 
-export const dynamic = "force-dynamic"; // Force dynamic rendering
+// Force dynamic rendering so Next.js doesn't try to statically pre-render this page
+export const dynamic = "force-dynamic";
 
 /* ------------------------------------------------------------------
   1. TYPE DEFINITIONS & SAMPLE DATA
@@ -327,27 +328,12 @@ const defaultValues: FormData = {
 };
 
 /* ------------------------------------------------------------------
-  Utility Functions for DOB Parsing & Age Calculation
------------------------------------------------------------------- */
-
-/** 
- * Removes spaces or the word "dash" from a spoken date
- * and tries to interpret a format like "10jan2024" or "10 jan 2024".
- */
-function parseSpokenDate(spokenDob: string) {
-  // Example input: "10 jan 2024", "10jan2024", or "10 dash jan dash 2024"
-  let cleaned = spokenDob
-    .toLowerCase()
-    .replace(/\bdash\b/g, "-")  // remove the word "dash"
-    .replace(/\s+/g, "");       // remove all spaces
-
-  // Now we expect something like: "10jan2024" or "10-jan-2024"
-  // Let's remove any extra punctuation except numbers and letters:
-  cleaned = cleaned.replace(/[^a-z0-9]/g, "");
-
-  // Attempt to match day-month-year
-  // We expect something like (\d{1,2})([a-z]{3})(\d{4})
-  // e.g. "10jan2024"
+  Helper Functions for DOB Parsing and Age Calculation
+------------------------------------------------------------------*/
+const parseSpokenDate = (spokenDate: string): string => {
+  // Remove any spaces before processing (e.g. "10 jan 2024" becomes "10jan2024")
+  const cleaned = spokenDate.replace(/\s+/g, "");
+  // Expecting a format like "10jan2024"
   const monthMap: { [key: string]: string } = {
     jan: "01",
     feb: "02",
@@ -362,23 +348,20 @@ function parseSpokenDate(spokenDob: string) {
     nov: "11",
     dec: "12",
   };
+  const match = cleaned.match(/(\d{1,2})([a-zA-Z]{3})(\d{4})/);
+  if (match) {
+    const day = match[1].padStart(2, "0");
+    const monStr = match[2].toLowerCase();
+    const month = monthMap[monStr];
+    const year = match[3];
+    if (month) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+  return "";
+};
 
-  const regex = /(\d{1,2})([a-z]{3})(\d{4})/i;
-  const match = cleaned.match(regex);
-  if (!match) return "";
-
-  const day = match[1].padStart(2, "0"); // e.g. "10"
-  const monStr = match[2].toLowerCase(); // e.g. "jan"
-  const year = match[3];                // e.g. "2024"
-  const month = monthMap[monStr];
-  if (!month) return "";
-
-  // Return an ISO date
-  return `${year}-${month}-${day}`;
-}
-
-/** Calculates years and months from a Date of Birth up to "today". */
-function calculateAge(dobDate: Date) {
+const calculateAge = (dobDate: Date) => {
   const today = new Date();
   let years = today.getFullYear() - dobDate.getFullYear();
   let months = today.getMonth() - dobDate.getMonth();
@@ -387,16 +370,7 @@ function calculateAge(dobDate: Date) {
     months += 12;
   }
   return { years, months };
-}
-
-/** Simple helper to convert "days"/"day", "months"/"month", etc. */
-function convertUnit(raw: string) {
-  const lower = raw.toLowerCase();
-  if (lower.startsWith("day")) return "Days";
-  if (lower.startsWith("month")) return "Months";
-  if (lower.startsWith("year")) return "Years";
-  return "";
-}
+};
 
 /* ------------------------------------------------------------------
   2. MAIN COMPONENT
@@ -406,12 +380,10 @@ const PatientRegistration: NextPage = () => {
   const { register, handleSubmit, reset, watch, setValue } =
     useForm<FormData>({ defaultValues });
 
-  // Current record ID (if editing an existing patient)
+  // This will store the current record ID if we detect it in the query string.
   const [recordId, setRecordId] = useState<string | null>(null);
 
-  // Example clinic ID
-  const clinicId = "clinic1";
-
+  // We can load the ID from the query string in a client-side useEffect
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -422,7 +394,10 @@ const PatientRegistration: NextPage = () => {
     }
   }, []);
 
-  // If editing, fetch existing record
+  // Example clinic ID
+  const clinicId = "clinic1";
+
+  // If editing an existing record, fetch it once recordId is set
   useEffect(() => {
     if (!recordId) return;
     get(child(ref(db), `clinic/${clinicId}/patientdetail/${recordId}`))
@@ -441,14 +416,12 @@ const PatientRegistration: NextPage = () => {
   const onSubmit = async (formValues: FormData) => {
     try {
       if (recordId) {
-        // Update existing
         await set(
           ref(db, `clinic/${clinicId}/patientdetail/${recordId}`),
           formValues
         );
         alert("Updated existing patient: " + recordId);
       } else {
-        // Create new
         const newRef = push(ref(db, `clinic/${clinicId}/patientdetail`));
         await set(newRef, formValues);
         alert("New patient created with id: " + newRef.key);
@@ -475,18 +448,13 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    3. SPEECH RECOGNITION
+    3. ADVANCED SPEECH COMMANDS
   ------------------------------------------------------------------ */
+  const goToNextTab = () =>
+    setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
+  const goToPreviousTab = () =>
+    setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
 
-  // Navigation helpers
-  const [tabIndex, setTabIndex] = useState(0);
-  const goToNextTab = () => setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
-  const goToPreviousTab = () => setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
-
-  /** 
-   * Helper to handle advanced “ophthalmic select” voice commands,
-   * e.g. "ophthalmic select Cataract right duration 2 days left duration 3 days".
-   */
   const handleOphthalmicSelect = (
     name: string,
     rDur: string,
@@ -523,88 +491,164 @@ const PatientRegistration: NextPage = () => {
     );
   };
 
-  /**
-   * 1) Basic exact commands 
-   * 2) "Fuzzy fallback": if user says "fist name" => we fix to "first name"
-   *    or if user says "chek same contact" => we fix to "check same as contact number", etc.
-   */
+  const convertUnit = (raw: string) => {
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("day")) return "Days";
+    if (lower.startsWith("month")) return "Months";
+    if (lower.startsWith("year")) return "Years";
+    return "";
+  };
+
+  // -----------------------------
+  // VOICE COMMANDS
+  // -----------------------------
   const voiceCommands = [
-    // -------------- BASIC EXACT COMMANDS --------------
+    // Basic commands for patient fields
     {
-      // "check same as contact number"
+      command: /first name (.*)/i,
+      callback: (value: string) => {
+        setValue("firstName", value.trim(), { shouldValidate: true });
+        toast.info("First Name set to: " + value);
+      },
+    },
+    {
+      command: /middle name (.*)/i,
+      callback: (value: string) => {
+        setValue("middleName", value.trim(), { shouldValidate: true });
+        toast.info("Middle Name set to: " + value);
+      },
+    },
+    {
+      command: /last name (.*)/i,
+      callback: (value: string) => {
+        setValue("lastName", value.trim(), { shouldValidate: true });
+        toast.info("Last Name set to: " + value);
+      },
+    },
+    {
+      command: /mobile number (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/\D/g, "");
+        setValue("mobileNumber", sanitized, { shouldValidate: true });
+        toast.info("Mobile Number set to: " + sanitized);
+      },
+    },
+    {
+      command: /second number (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/\D/g, "");
+        setValue("secondaryNumber", sanitized, { shouldValidate: true });
+        toast.info("Second Number set to: " + sanitized);
+      },
+    },
+    {
+      command: /email (.*)/i,
+      callback: (rawEmail: string) => {
+        const sanitized = rawEmail.replaceAll(" ", "");
+        setValue("email", sanitized, { shouldValidate: true });
+        toast.info("Email set to: " + sanitized);
+      },
+    },
+    {
+      command: /whatsapp number (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/\D/g, "");
+        setValue("whatsappNumber", sanitized, { shouldValidate: true });
+        toast.info("WhatsApp Number set to: " + sanitized);
+      },
+    },
+    // New command: Check Same as Contact Number
+    {
       command: /check same as contact number/i,
       callback: () => {
         setValue("sameAsContact", true, { shouldValidate: true });
-        // Also copy the mobile number to the WhatsApp field
-        setValue("whatsappNumber", watch("mobileNumber") || "", {
-          shouldValidate: true,
-        });
-        toast.info(
-          "Same as contact number checked & WhatsApp updated with mobile number."
-        );
+        const mobile = watch("mobileNumber");
+        setValue("whatsappNumber", mobile, { shouldValidate: true });
+        toast.info("Same as contact number checked and WhatsApp number updated.");
       },
     },
+    // New command: Gender (with additional DOM click for visual selection)
     {
-      // "same as contact number" (shorter alternative)
-      command: /same as contact number/i,
-      callback: () => {
-        setValue("sameAsContact", true, { shouldValidate: true });
-        setValue("whatsappNumber", watch("mobileNumber") || "", {
-          shouldValidate: true,
-        });
-        toast.info(
-          "Same as contact number checked & WhatsApp updated with mobile number."
-        );
-      },
-    },
-    {
-      // gender male / gender female / gender transgender
       command: /gender (male|female|transgender)/i,
       callback: (value: string) => {
-        // Capitalize properly:
-        const g = value[0].toUpperCase() + value.slice(1).toLowerCase();
-        setValue("gender", g, { shouldValidate: true });
-        toast.info("Gender set to: " + g);
+        const formatted =
+          value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+        setValue("gender", formatted, { shouldValidate: true });
+        // Attempt to find and click the corresponding radio button
+        const radio = document.querySelector(
+          `input[name="gender"][value="${formatted}"]`
+        ) as HTMLInputElement;
+        if (radio) {
+          radio.checked = true;
+        }
+        toast.info("Gender set to: " + formatted);
       },
     },
+    // New command: DOB (remove spaces before parsing)
     {
-      // e.g. "dob 10jan2024" or "dob 10 jan 2024"
-      command: /dob (.*)/i,
+      command: /dob (\d{1,2}\s*[a-zA-Z]{3}\s*\d{4})/i,
       callback: (spokenDob: string) => {
-        const parsed = parseSpokenDate(spokenDob);
-        if (parsed) {
-          setValue("dob", parsed, { shouldValidate: true });
-          toast.info("DOB set to: " + parsed);
-          // Calculate age
-          const dobDate = new Date(parsed);
-          if (!isNaN(dobDate.getTime())) {
-            const { years, months } = calculateAge(dobDate);
-            setValue("ageYears", years.toString(), { shouldValidate: true });
-            setValue("ageMonths", months.toString(), { shouldValidate: true });
-            toast.info(`Age set to: ${years} years, ${months} months.`);
-          }
+        const parsedDob = parseSpokenDate(spokenDob);
+        if (parsedDob) {
+          setValue("dob", parsedDob, { shouldValidate: true });
+          toast.info("DOB set to: " + parsedDob);
+          const dobDate = new Date(parsedDob);
+          const age = calculateAge(dobDate);
+          setValue("ageYears", age.years.toString(), { shouldValidate: true });
+          setValue("ageMonths", age.months.toString(), { shouldValidate: true });
+          toast.info(`Age set to: ${age.years} years and ${age.months} months`);
         } else {
-          toast.error("Could not parse DOB from speech. Try again.");
+          toast.error("Failed to parse the spoken DOB.");
         }
       },
     },
     {
-      // "next tab", "previous tab"
-      command: "next tab",
-      callback: () => {
-        goToNextTab();
-        toast.info("Moved to next tab.");
+      command: /appointment date (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/ dash /g, "-").replace(/ /g, "");
+        setValue("appointmentDate", sanitized, { shouldValidate: true });
+        toast.info("Appointment Date set to: " + sanitized);
       },
     },
     {
-      command: "previous tab",
-      callback: () => {
-        goToPreviousTab();
-        toast.info("Moved to previous tab.");
+      command: /appointment time (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/ colon /g, ":").replace(/ /g, "");
+        setValue("appointmentTime", sanitized, { shouldValidate: true });
+        toast.info("Appointment Time set to: " + sanitized);
       },
     },
+    // New command: Relationship
     {
-      // "show patient details", "show other details", etc.
+      command: /relationship (.*)/i,
+      callback: (value: string) => {
+        setValue("relation", value.trim(), { shouldValidate: true });
+        toast.info("Relationship set to: " + value);
+      },
+    },
+    // New command: Patient Type (New or Old)
+    {
+      command: /patient (new|old)/i,
+      callback: (value: string) => {
+        const type = value.toLowerCase() === "new" ? "New" : "Old";
+        setValue("patientType", type, { shouldValidate: true });
+        toast.info("Patient type set to: " + type);
+      },
+    },
+    // -----------------------------
+    // FUZZY MATCHING FOR TYPOS (for example, "fist name" instead of "first name")
+    // -----------------------------
+    {
+      command: /fist name (.*)/i,
+      callback: (value: string) => {
+        setValue("firstName", value.trim(), { shouldValidate: true });
+        toast.info("Fuzzy First Name set to: " + value);
+      },
+    },
+    // -----------------------------
+    // NAVIGATION BETWEEN TABS
+    // -----------------------------
+    {
       command: "show patient details",
       callback: () => {
         setTabIndex(0);
@@ -633,16 +677,23 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
-      // e.g. "patient new" or "patient old"
-      command: /patient (new|old)/i,
-      callback: (value: string) => {
-        const type = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-        setValue("patientType", type, { shouldValidate: true });
-        toast.info("Patient type set to: " + type);
+      command: "next tab",
+      callback: () => {
+        goToNextTab();
+        toast.info("Moved to next tab.");
       },
     },
     {
-      // OPHTHALMIC
+      command: "previous tab",
+      callback: () => {
+        goToPreviousTab();
+        toast.info("Moved to previous tab.");
+      },
+    },
+    // -----------------------------
+    // OPHTHALMIC COMMAND (ADVANCED)
+    // -----------------------------
+    {
       command:
         /ophthalmic select ([a-zA-Z ]+) right duration (\d+) (days|day|months|month|years|year) left duration (\d+) (days|day|months|month|years|year)/i,
       callback: (
@@ -655,117 +706,22 @@ const PatientRegistration: NextPage = () => {
         handleOphthalmicSelect(conditionName, rValue, rUnit, lValue, lUnit);
       },
     },
+    // -----------------------------
+    // SAVE, BACK
+    // -----------------------------
     {
-      // Save/submit
       command: /(submit|save form)/i,
       callback: () => {
         handleSubmit(onSubmit)();
       },
     },
     {
-      // back
       command: /(back|go back)/i,
       callback: () => {
         router.back();
       },
     },
-
-    // -------------- END BASIC EXACT COMMANDS --------------
-    //
-    // -------------- OPTIONAL WILDCARD FOR "FUZZY" --------------
-    // This catches anything not matched above, then tries to fix
-    // common mistakes (e.g. "fist name" => "first name").
-    {
-      command: "*",
-      callback: (input: string) => {
-        handleFuzzyCommands(input);
-      },
-    },
   ];
-
-  /**
-   * Minimal "fuzzy" approach: we look for known typos
-   * in `input` and re-trigger the "correct" command if possible.
-   * You can expand this with more synonyms or a real fuzzy library.
-   */
-  function handleFuzzyCommands(spokenText: string) {
-    let corrected = spokenText.toLowerCase();
-
-    // Examples of naive replacements:
-    // (You can add more as you notice user mistakes.)
-    const replacements: Array<[RegExp, string]> = [
-      // "fist name" => "first name"
-      [/\bfist name\b/g, "first name"],
-      // "chek same as contact number" => "check same as contact number"
-      [/\bchek same as contact number\b/g, "check same as contact number"],
-      // "femail" => "female"
-      [/\bfemail\b/g, "female"],
-      // "feamle" => "female"
-      [/\bfeamle\b/g, "female"],
-      // "gander" => "gender"
-      [/\bgander\b/g, "gender"],
-      // etc.
-    ];
-
-    replacements.forEach(([pattern, replacement]) => {
-      corrected = corrected.replace(pattern, replacement);
-    });
-
-    // If corrections changed the text, let's see if it now matches
-    // one of our exact commands. We'll re-check the command list in that case.
-    if (corrected !== spokenText.toLowerCase()) {
-      // We do a short hack: set the transcript to the corrected text
-      // and let react-speech-recognition re-run. But we only do it once
-      // to avoid loops. We can manually parse the corrected text below:
-
-      // Here, we can simply check if it triggers the main commands:
-      applyCorrectedSpeech(corrected);
-    }
-    // else: do nothing if we can't fix it
-  }
-
-  /**
-   * This function tries to match the corrected text
-   * against the existing commands (somewhat manually).
-   */
-  function applyCorrectedSpeech(text: string) {
-    // We'll do a manual check for the same patterns we used in voiceCommands
-    // For brevity, only a few examples:
-    if (/check same as contact number/i.test(text)) {
-      setValue("sameAsContact", true, { shouldValidate: true });
-      setValue("whatsappNumber", watch("mobileNumber") || "", {
-        shouldValidate: true,
-      });
-      toast.info(
-        "Same as contact number checked & WhatsApp updated (via fuzzy match)."
-      );
-      return;
-    }
-
-    if (/first name (.*)/i.test(text)) {
-      const match = text.match(/first name (.*)/i);
-      if (match) {
-        const value = match[1].trim();
-        setValue("firstName", value, { shouldValidate: true });
-        toast.info("(Fuzzy) First Name set to: " + value);
-      }
-      return;
-    }
-
-    if (/gender (male|female|transgender)/i.test(text)) {
-      const match = text.match(/gender (male|female|transgender)/i);
-      if (match) {
-        const genderValue = match[1];
-        const g = genderValue[0].toUpperCase() + genderValue.slice(1).toLowerCase();
-        setValue("gender", g, { shouldValidate: true });
-        toast.info("(Fuzzy) Gender set to: " + g);
-      }
-      return;
-    }
-
-    // ... and so on for other patterns you'd like to fix automatically.
-    // You can keep adding if/else blocks or a more robust system.
-  }
 
   const {
     transcript,
@@ -795,8 +751,9 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    4. TAB RENDERING
+    4. TAB HANDLING
   ------------------------------------------------------------------ */
+  const [tabIndex, setTabIndex] = useState(0);
 
   const renderTabButtons = () => (
     <div className="flex gap-4 border-b mb-4 pb-2 text-black">
@@ -820,13 +777,12 @@ const PatientRegistration: NextPage = () => {
   );
 
   /* ------------------------------------------------------------------
-    5. PATIENT DETAILS TAB
+    5. RENDER PATIENT DETAILS TAB
   ------------------------------------------------------------------ */
   const renderPatientDetailsTab = () => (
     <div className="flex flex-col md:flex-row gap-4 text-black">
       {/* Left side: Patient Info */}
       <div className="flex-1 p-4 bg-white shadow rounded space-y-4">
-        {/* Title, First Name, Middle Name, Last Name */}
         <div className="grid grid-cols-4 gap-2">
           <div>
             <label className="text-black">Title</label>
@@ -863,7 +819,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Mobile, Secondary */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Mobile Number*</label>
@@ -881,7 +836,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Email, WhatsApp */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Email</label>
@@ -906,7 +860,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Gender, DOB, Age, Relation */}
         <div className="grid grid-cols-5 gap-2">
           <div>
             <label className="text-black">Gender</label>
@@ -956,7 +909,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Patient Type, Pincode, State */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Patient Type</label>
@@ -985,7 +937,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* City, Area, Address1 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">City</label>
@@ -1010,7 +961,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Address2, MRNo, HealthID */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Address 2</label>
@@ -1035,7 +985,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Languages, referral */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Primary Language</label>
@@ -1158,7 +1107,7 @@ const PatientRegistration: NextPage = () => {
   );
 
   /* ------------------------------------------------------------------
-    6. OTHER DETAILS TAB
+    6. RENDER OTHER DETAILS TAB
   ------------------------------------------------------------------ */
   const renderOtherDetailsTab = () => {
     const currentImg = watch("patientImage");
@@ -1287,13 +1236,12 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    7. HISTORY TAB
+    7. RENDER HISTORY TAB (OPHTHALMIC + SYSTEMIC + PEDIATRIC)
   ------------------------------------------------------------------ */
   const renderHistoryTab = () => {
     const ophArr = watch("ophthalmicHistory") || [];
     const sysArr = watch("systemicHistory") || [];
 
-    // Ophthalmic
     const toggleOph = (name: string) => {
       const idx = ophArr.findIndex((x) => x.name === name);
       if (idx >= 0) {
@@ -1301,21 +1249,17 @@ const PatientRegistration: NextPage = () => {
         newArr.splice(idx, 1);
         setValue("ophthalmicHistory", newArr, { shouldDirty: true });
       } else {
-        setValue(
-          "ophthalmicHistory",
-          [
-            ...ophArr,
-            {
-              name,
-              rightDuration: "",
-              rightDurationUnit: "",
-              leftDuration: "",
-              leftDurationUnit: "",
-              comments: "",
-            },
-          ],
-          { shouldDirty: true }
-        );
+        const newItem: OphthalmicItem = {
+          name,
+          rightDuration: "",
+          rightDurationUnit: "",
+          leftDuration: "",
+          leftDurationUnit: "",
+          comments: "",
+        };
+        setValue("ophthalmicHistory", [...ophArr, newItem], {
+          shouldDirty: true,
+        });
       }
     };
 
@@ -1333,16 +1277,15 @@ const PatientRegistration: NextPage = () => {
     };
 
     const copyRightToLeft = (name: string) => {
-      const idx = ophArr.findIndex((x) => x.name === name);
+      const newArr = [...ophArr];
+      const idx = newArr.findIndex((x) => x.name === name);
       if (idx >= 0) {
-        const newArr = [...ophArr];
         newArr[idx].leftDuration = newArr[idx].rightDuration;
         newArr[idx].leftDurationUnit = newArr[idx].rightDurationUnit;
         setValue("ophthalmicHistory", newArr, { shouldDirty: true });
       }
     };
 
-    // Systemic
     const toggleSys = (name: string) => {
       const idx = sysArr.findIndex((x) => x.name === name);
       if (idx >= 0) {
@@ -1350,19 +1293,15 @@ const PatientRegistration: NextPage = () => {
         newArr.splice(idx, 1);
         setValue("systemicHistory", newArr, { shouldDirty: true });
       } else {
-        setValue(
-          "systemicHistory",
-          [
-            ...sysArr,
-            {
-              name,
-              duration: "",
-              durationUnit: "",
-              comments: "",
-            },
-          ],
-          { shouldDirty: true }
-        );
+        const newItem: SystemicItem = {
+          name,
+          duration: "",
+          durationUnit: "",
+          comments: "",
+        };
+        setValue("systemicHistory", [...sysArr, newItem], {
+          shouldDirty: true,
+        });
       }
     };
 
@@ -1406,10 +1345,10 @@ const PatientRegistration: NextPage = () => {
                   <tr className="bg-gray-100 border-b">
                     <th className="p-2 border-r">Name</th>
                     <th className="p-2 border-r">Right Duration</th>
-                    <th className="p-2 border-r">Right Unit</th>
+                    <th className="p-2 border-r">Right Duration Unit</th>
                     <th className="p-2 border-r">Copy</th>
                     <th className="p-2 border-r">Left Duration</th>
-                    <th className="p-2 border-r">Left Unit</th>
+                    <th className="p-2 border-r">Left Duration Unit</th>
                     <th className="p-2">Comments</th>
                   </tr>
                 </thead>
@@ -1437,11 +1376,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.rightDurationUnit}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "rightDurationUnit",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "rightDurationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1479,11 +1414,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.leftDurationUnit}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "leftDurationUnit",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "leftDurationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1535,7 +1466,7 @@ const PatientRegistration: NextPage = () => {
                   <tr className="bg-gray-100 border-b">
                     <th className="p-2 border-r">Name</th>
                     <th className="p-2 border-r">Duration</th>
-                    <th className="p-2 border-r">Unit</th>
+                    <th className="p-2 border-r">Duration Unit</th>
                     <th className="p-2">Comments</th>
                   </tr>
                 </thead>
@@ -1563,11 +1494,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateSysField(
-                              item.name,
-                              "durationUnit",
-                              e.target.value
-                            )
+                            updateSysField(item.name, "durationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1594,7 +1521,6 @@ const PatientRegistration: NextPage = () => {
           )}
         </div>
 
-        {/* Additional text fields */}
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
             <label className="text-black">Medical History</label>
@@ -1612,7 +1538,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Pediatric */}
         <div className="mt-4">
           <h3 className="font-semibold text-black">Pediatric History</h3>
           <div className="flex gap-4 mt-2">
@@ -1676,9 +1601,9 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    8. ALLERGIES TAB
+    8. RENDER ALLERGIES TAB
   ------------------------------------------------------------------ */
-  const [activeDrugCategory, setActiveDrugCategory] = useState(
+  const [activeDrugCategory, setActiveDrugCategory] = useState<string>(
     DRUG_CATEGORIES[0].category
   );
 
@@ -1721,7 +1646,6 @@ const PatientRegistration: NextPage = () => {
     }
   };
 
-  // Contact allergies
   const contactArr = watch("contactAllergies") || [];
   const toggleContact = (itemName: string) => {
     const idx = contactArr.findIndex((x: AllergyItem) => x.name === itemName);
@@ -1755,7 +1679,6 @@ const PatientRegistration: NextPage = () => {
     }
   };
 
-  // Food allergies
   const foodArr = watch("foodAllergies") || [];
   const toggleFood = (itemName: string) => {
     const idx = foodArr.findIndex((x: AllergyItem) => x.name === itemName);
@@ -1795,10 +1718,8 @@ const PatientRegistration: NextPage = () => {
 
     return (
       <div className="bg-white p-4 rounded shadow space-y-4 text-black">
-        {/* DRUG ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Drug (Allergies)</h3>
-          {/* Category tabs */}
           <div className="flex gap-2 mb-2">
             {DRUG_CATEGORIES.map((cat) => (
               <button
@@ -1816,7 +1737,6 @@ const PatientRegistration: NextPage = () => {
             ))}
           </div>
 
-          {/* Pills for the current category */}
           <div className="flex flex-wrap gap-2 mb-2">
             {DRUG_CATEGORIES.find((c) => c.category === activeDrugCategory)?.items.map(
               (itemName) => {
@@ -1839,7 +1759,6 @@ const PatientRegistration: NextPage = () => {
             )}
           </div>
 
-          {/* Table of selected items */}
           {activeList.length > 0 && (
             <div className="overflow-auto">
               <table className="min-w-full text-black border">
@@ -1916,7 +1835,6 @@ const PatientRegistration: NextPage = () => {
             </div>
           )}
 
-          {/* Overall comment for drug allergies */}
           <textarea
             placeholder="Drug Allergies Comment"
             {...register("drugAllergiesComment")}
@@ -1924,7 +1842,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* CONTACT ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Contact (Allergies)</h3>
           <div className="flex flex-wrap gap-2 mb-2">
@@ -1981,11 +1898,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateContactField(
-                              item.name,
-                              "durationUnit",
-                              e.target.value
-                            )
+                            updateContactField(item.name, "durationUnit", e.target.value)
                           }
                         >
                           <option value="">Please Select</option>
@@ -2017,7 +1930,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* FOOD ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Food (Allergies)</h3>
           <div className="flex flex-wrap gap-2 mb-2">
@@ -2110,7 +2022,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* Other Allergy */}
         <div>
           <label className="font-semibold text-black">Other Allergy</label>
           <input
@@ -2172,6 +2083,7 @@ const PatientRegistration: NextPage = () => {
         </h1>
 
         {renderTabButtons()}
+
         {tabIndex === 0 && renderPatientDetailsTab()}
         {tabIndex === 1 && renderOtherDetailsTab()}
         {tabIndex === 2 && renderHistoryTab()}
