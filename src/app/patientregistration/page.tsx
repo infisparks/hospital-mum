@@ -478,6 +478,14 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
+        // e.g. "first name John"
+        command: /middle name (.*)/i,
+        callback: (value: string) => {
+          setValue("middleName", value.trim(), { shouldValidate: true });
+          toast.info("First Name set to: " + value);
+        },
+      },
+    {
       command: /last name (.*)/i,
       callback: (value: string) => {
         setValue("lastName", value.trim(), { shouldValidate: true });
