@@ -1,21 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect } from "react";
 import { NextPage } from "next";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { db } from "./../../../firebaseconfig";
+import { db } from "../../../firebaseconfig";
 import { ref, push, set, get, child } from "firebase/database";
-import SpeechRecognition, {
-  useSpeechRecognition,
-} from "react-speech-recognition";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FaMicrophone, FaMicrophoneSlash } from "react-icons/fa";
+import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
 
-// -----------------------------------------------------------------------------
-// 1. Ophthalmic & Systemic Data Structures for the "History" tab
-// -----------------------------------------------------------------------------
+// Force dynamic rendering so Next.js doesn't try to statically pre-render this page
+export const dynamic = "force-dynamic";
+
+/* ------------------------------------------------------------------
+  1. TYPE DEFINITIONS & SAMPLE DATA
+------------------------------------------------------------------ */
 
 type OphthalmicItem = {
   name: string;
@@ -81,11 +82,6 @@ const ALL_SYSTEMIC_NAMES = [
   "Benign Prostatic Hyperplasia(BPH)",
 ];
 
-// -----------------------------------------------------------------------------
-// 2. Allergies Data Structures
-// -----------------------------------------------------------------------------
-
-// For an individual drug/contact/food item
 type AllergyItem = {
   name: string;
   duration: string;
@@ -93,7 +89,6 @@ type AllergyItem = {
   comments: string;
 };
 
-// Drug categories, each with its own possible sub‐items
 const DRUG_CATEGORIES = [
   {
     category: "Antimicrobial Agents",
@@ -158,7 +153,6 @@ const DRUG_CATEGORIES = [
   },
 ];
 
-// Contact allergies
 const CONTACT_ALLERGIES_LIST = [
   "Alcohol",
   "Latex",
@@ -168,7 +162,6 @@ const CONTACT_ALLERGIES_LIST = [
   "Transpore",
 ];
 
-// Food allergies
 const FOOD_ALLERGIES_LIST = [
   "All Seafood",
   "Corn",
@@ -180,10 +173,6 @@ const FOOD_ALLERGIES_LIST = [
   "Lactose",
   "Mushroom",
 ];
-
-// -----------------------------------------------------------------------------
-// 3. Main Form Data Structures
-// -----------------------------------------------------------------------------
 
 type FormData = {
   // Patient Details
@@ -235,7 +224,7 @@ type FormData = {
   dlNo: string;
   gstNo: string;
 
-  // Ophthalmic & Systemic Histories
+  // Histories
   ophthalmicHistory: OphthalmicItem[];
   systemicHistory: SystemicItem[];
   medicalHistory: string;
@@ -245,25 +234,20 @@ type FormData = {
   immunizationAssessment: string;
 
   // Allergies
-  // --- For Drug Allergies, we store an object of sub‐category => selected items
   drugAllergies: {
     [category: string]: AllergyItem[];
   };
   drugAllergiesComment: string;
 
-  // --- Contact allergies: a single array of chosen items
   contactAllergies: AllergyItem[];
   contactAllergiesComment: string;
 
-  // --- Food allergies: a single array of chosen items
   foodAllergies: AllergyItem[];
   foodAllergiesComment: string;
 
-  // --- any other special field you want
   otherAllergy: string;
 };
 
-// Default Values
 const defaultValues: FormData = {
   // Patient Details
   title: "Mr",
@@ -339,35 +323,34 @@ const defaultValues: FormData = {
   otherAllergy: "",
 };
 
-// -----------------------------------------------------------------------------
-// 4. The main component
-// -----------------------------------------------------------------------------
+/* ------------------------------------------------------------------
+  2. MAIN COMPONENT
+------------------------------------------------------------------ */
 
-const Home: NextPage = () => {
+const PatientRegistration: NextPage = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { register, handleSubmit, reset, watch, setValue } =
     useForm<FormData>({ defaultValues });
 
-  // ---------------------------------------------------------------------------
-  // Define your clinic ID – you can replace this with a dynamic value later.
-  // ---------------------------------------------------------------------------
-  const clinicId = "clinic1";
-
-  // Keep track of the active big tab
-  const [tabIndex, setTabIndex] = useState(0);
-
-  // If editing an existing record, store recordId
+  // This will store the current record ID if we detect it in the query string.
   const [recordId, setRecordId] = useState<string | null>(null);
 
+  // We can load the ID from the query string in a client-side useEffect:
   useEffect(() => {
-    const id = searchParams.get("id");
-    if (id) setRecordId(id);
-  }, [searchParams]);
+    // Make sure window is defined (client-side).
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const idFromQuery = params.get("id");
+      if (idFromQuery) {
+        setRecordId(idFromQuery);
+      }
+    }
+  }, []);
 
-  // ---------------------------------------------------------------------------
-  // 4A. Fetch if editing (using the clinic-based path)
-  // ---------------------------------------------------------------------------
+  // Example clinic ID
+  const clinicId = "clinic1";
+
+  // If editing an existing record, fetch it once recordId is set
   useEffect(() => {
     if (!recordId) return;
     get(child(ref(db), `clinic/${clinicId}/patientdetail/${recordId}`))
@@ -382,21 +365,19 @@ const Home: NextPage = () => {
       .catch((err) => console.error(err));
   }, [recordId, reset, clinicId]);
 
-  // ---------------------------------------------------------------------------
-  // 4B. On form submit (using the clinic-based path)
-  // ---------------------------------------------------------------------------
+  // -- On form submit
   const onSubmit = async (formValues: FormData) => {
     try {
       if (recordId) {
+        // If we have a recordId, we are updating
         await set(
           ref(db, `clinic/${clinicId}/patientdetail/${recordId}`),
           formValues
         );
         alert("Updated existing patient: " + recordId);
       } else {
-        const newRef = push(
-          ref(db, `clinic/${clinicId}/patientdetail`)
-        );
+        // Otherwise, we are creating a new entry
+        const newRef = push(ref(db, `clinic/${clinicId}/patientdetail`));
         await set(newRef, formValues);
         alert("New patient created with id: " + newRef.key);
         router.replace("/");
@@ -408,9 +389,7 @@ const Home: NextPage = () => {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // 4C. Photo upload
-  // ---------------------------------------------------------------------------
+  // -- Handle photo upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -423,9 +402,9 @@ const Home: NextPage = () => {
     reader.readAsDataURL(file);
   };
 
-  // ---------------------------------------------------------------------------
-  // 4D. Voice commands
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    3. SPEECH RECOGNITION COMMANDS & HANDLERS
+  ------------------------------------------------------------------ */
   const voiceCommands = [
     {
       command: "first name *",
@@ -548,9 +527,11 @@ const Home: NextPage = () => {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // 4E. Tabs
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    4. TAB HANDLING
+  ------------------------------------------------------------------ */
+  const [tabIndex, setTabIndex] = useState(0);
+
   const renderTabButtons = () => (
     <div className="flex gap-4 border-b mb-4 pb-2 text-black">
       {["Patient Details", "Other Details", "History", "Allergies"].map(
@@ -572,12 +553,12 @@ const Home: NextPage = () => {
     </div>
   );
 
-  // ---------------------------------------------------------------------------
-  // 5. Render: Patient Details tab
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    5. RENDER PATIENT DETAILS TAB
+  ------------------------------------------------------------------ */
   const renderPatientDetailsTab = () => (
     <div className="flex flex-col md:flex-row gap-4 text-black">
-      {/* Left side (Patient Info) */}
+      {/* Left side: Patient Info */}
       <div className="flex-1 p-4 bg-white shadow rounded space-y-4">
         <div className="grid grid-cols-4 gap-2">
           <div>
@@ -806,7 +787,7 @@ const Home: NextPage = () => {
         </div>
       </div>
 
-      {/* Right side (Appointment) */}
+      {/* Right side: Appointment */}
       <div className="md:w-1/3 p-4 bg-white shadow rounded space-y-4 text-black">
         <h3 className="font-bold text-black">Appointment Details</h3>
         <div>
@@ -902,9 +883,9 @@ const Home: NextPage = () => {
     </div>
   );
 
-  // ---------------------------------------------------------------------------
-  // 6. Render: Other Details tab
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    6. RENDER OTHER DETAILS TAB
+  ------------------------------------------------------------------ */
   const renderOtherDetailsTab = () => {
     const currentImg = watch("patientImage");
     return (
@@ -980,7 +961,9 @@ const Home: NextPage = () => {
             </div>
           </div>
           <div>
-            <label className="font-semibold text-black">Emergency Contact</label>
+            <label className="font-semibold text-black">
+              Emergency Contact
+            </label>
             <div className="flex gap-2">
               <input
                 placeholder="Name"
@@ -1029,9 +1012,9 @@ const Home: NextPage = () => {
     );
   };
 
-  // ---------------------------------------------------------------------------
-  // 7. Render: History tab (Ophthalmic + Systemic + Pediatric)
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    7. RENDER HISTORY TAB (OPHTHALMIC + SYSTEMIC + PEDIATRIC)
+  ------------------------------------------------------------------ */
   const renderHistoryTab = () => {
     const ophArr = watch("ophthalmicHistory") || [];
     const sysArr = watch("systemicHistory") || [];
@@ -1058,7 +1041,6 @@ const Home: NextPage = () => {
       }
     };
 
-    // Update an ophthalmic field
     const updateOphField = (
       name: string,
       field: keyof OphthalmicItem,
@@ -1072,7 +1054,6 @@ const Home: NextPage = () => {
       }
     };
 
-    // Copy right -> left
     const copyRightToLeft = (name: string) => {
       const newArr = [...ophArr];
       const idx = newArr.findIndex((x) => x.name === name);
@@ -1103,7 +1084,6 @@ const Home: NextPage = () => {
       }
     };
 
-    // Update a systemic field
     const updateSysField = (
       name: string,
       field: keyof SystemicItem,
@@ -1421,15 +1401,13 @@ const Home: NextPage = () => {
     );
   };
 
-  // ---------------------------------------------------------------------------
-  // 8. Render: Allergies tab (Drug, Contact, Food)
-  // ---------------------------------------------------------------------------
-  // Track which drug category is active (e.g. "Antimicrobial Agents")
+  /* ------------------------------------------------------------------
+    8. RENDER ALLERGIES TAB
+  ------------------------------------------------------------------ */
   const [activeDrugCategory, setActiveDrugCategory] = useState<string>(
     DRUG_CATEGORIES[0].category
   );
 
-  // Helper to toggle a drug item within a specific category
   const toggleDrugItem = (category: string, itemName: string) => {
     const drugAllergies = watch("drugAllergies");
     const categoryList = drugAllergies[category] || [];
@@ -1453,7 +1431,6 @@ const Home: NextPage = () => {
     }
   };
 
-  // Update a field in a selected drug item
   const updateDrugField = (
     category: string,
     itemName: string,
@@ -1472,9 +1449,8 @@ const Home: NextPage = () => {
     }
   };
 
-  // Contact Allergies
+  // Contact allergies
   const contactArr = watch("contactAllergies") || [];
-
   const toggleContact = (itemName: string) => {
     const idx = contactArr.findIndex((x: AllergyItem) => x.name === itemName);
     if (idx >= 0) {
@@ -1507,9 +1483,8 @@ const Home: NextPage = () => {
     }
   };
 
-  // Food Allergies
+  // Food allergies
   const foodArr = watch("foodAllergies") || [];
-
   const toggleFood = (itemName: string) => {
     const idx = foodArr.findIndex((x: AllergyItem) => x.name === itemName);
     if (idx >= 0) {
@@ -1551,7 +1526,7 @@ const Home: NextPage = () => {
         {/* DRUG ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Drug (Allergies)</h3>
-          {/* Subcategory tabs: Antimicrobial, Antifungal, etc. */}
+          {/* Category tabs */}
           <div className="flex gap-2 mb-2">
             {DRUG_CATEGORIES.map((cat) => (
               <button
@@ -1568,7 +1543,8 @@ const Home: NextPage = () => {
               </button>
             ))}
           </div>
-          {/* Show the pills for the currently active category */}
+
+          {/* Pills for the current category */}
           <div className="flex flex-wrap gap-2 mb-2">
             {DRUG_CATEGORIES.find((c) => c.category === activeDrugCategory)?.items.map(
               (itemName) => {
@@ -1590,7 +1566,8 @@ const Home: NextPage = () => {
               }
             )}
           </div>
-          {/* Table of selected items in this category */}
+
+          {/* Table of selected items */}
           {activeList.length > 0 && (
             <div className="overflow-auto">
               <table className="min-w-full text-black border">
@@ -1666,6 +1643,7 @@ const Home: NextPage = () => {
               </table>
             </div>
           )}
+
           {/* Overall comment for drug allergies */}
           <textarea
             placeholder="Drug Allergies Comment"
@@ -1881,77 +1859,79 @@ const Home: NextPage = () => {
     );
   };
 
-  // ---------------------------------------------------------------------------
-  // 9. Render Page
-  // ---------------------------------------------------------------------------
+  /* ------------------------------------------------------------------
+    9. MAIN RENDER
+  ------------------------------------------------------------------ */
   return (
-    <Suspense fallback={<div>Loading patient data...</div>}>
-      <div className="min-h-screen bg-gray-100 p-4 text-black">
-        <ToastContainer />
-        {/* Voice Control UI */}
-        <div className="max-w-screen-lg mx-auto mb-4 p-4 bg-white rounded shadow text-black">
-          <div className="flex justify-center mb-4 space-x-4">
-            <button
-              onClick={toggleListening}
-              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
-              {micListening ? (
-                <FaMicrophoneSlash className="mr-2" />
-              ) : (
-                <FaMicrophone className="mr-2" />
-              )}
-              {micListening ? "Stop Listening" : "Start Voice Control"}
-            </button>
-            <button
-              onClick={() => {
-                resetTranscript();
-                toast.info("Transcript cleared.");
-              }}
-              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
-            >
-              Reset Transcript
-            </button>
-          </div>
-          {micListening && (
-            <div className="mb-4 p-4 bg-gray-100 rounded">
-              <h3 className="text-lg font-semibold mb-2">Listening...</h3>
-              <p className="text-gray-700">{transcript}</p>
-            </div>
-          )}
+    <div className="min-h-screen bg-gray-100 p-4 text-black">
+      <ToastContainer />
+
+      {/* Voice Control UI */}
+      <div className="max-w-screen-lg mx-auto mb-4 p-4 bg-white rounded shadow text-black">
+        <div className="flex justify-center mb-4 space-x-4">
+          <button
+            onClick={toggleListening}
+            className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {micListening ? (
+              <FaMicrophoneSlash className="mr-2" />
+            ) : (
+              <FaMicrophone className="mr-2" />
+            )}
+            {micListening ? "Stop Listening" : "Start Voice Control"}
+          </button>
+          <button
+            onClick={() => {
+              resetTranscript();
+              toast.info("Transcript cleared.");
+            }}
+            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
+          >
+            Reset Transcript
+          </button>
         </div>
 
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="max-w-screen-lg mx-auto bg-white p-4 rounded shadow text-black"
-        >
-          <h1 className="text-2xl font-bold mb-4 text-black">
-            Patient Registration &amp; Appointment Form
-          </h1>
-          {renderTabButtons()}
-          {tabIndex === 0 && renderPatientDetailsTab()}
-          {tabIndex === 1 && renderOtherDetailsTab()}
-          {tabIndex === 2 && renderHistoryTab()}
-          {tabIndex === 3 && renderAllergiesTab()}
-
-          <div className="flex justify-end mt-4 gap-2">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-4 py-2 border rounded bg-gray-200 text-black"
-            >
-              Close
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 border rounded bg-green-500 text-white"
-            >
-              {recordId ? "Update" : "Save"}
-            </button>
+        {micListening && (
+          <div className="mb-4 p-4 bg-gray-100 rounded">
+            <h3 className="text-lg font-semibold mb-2">Listening...</h3>
+            <p className="text-gray-700">{transcript}</p>
           </div>
-        </form>
+        )}
       </div>
-    </Suspense>
+
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="max-w-screen-lg mx-auto bg-white p-4 rounded shadow text-black"
+      >
+        <h1 className="text-2xl font-bold mb-4 text-black">
+          Patient Registration &amp; Appointment Form
+        </h1>
+
+        {renderTabButtons()}
+
+        {tabIndex === 0 && renderPatientDetailsTab()}
+        {tabIndex === 1 && renderOtherDetailsTab()}
+        {tabIndex === 2 && renderHistoryTab()}
+        {tabIndex === 3 && renderAllergiesTab()}
+
+        <div className="flex justify-end mt-4 gap-2">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="px-4 py-2 border rounded bg-gray-200 text-black"
+          >
+            Close
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 border rounded bg-green-500 text-white"
+          >
+            {recordId ? "Update" : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 };
 
-export default Home;
+export default PatientRegistration;
