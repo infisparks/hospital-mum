@@ -4,12 +4,16 @@ import React, { useState, useEffect } from "react";
 import { NextPage } from "next";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { db } from "../../../firebaseconfig";
+import { db } from "../../../firebaseconfig"; // Adjust path as needed
 import { ref, push, set, get, child } from "firebase/database";
+
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 import { FaMicrophone, FaMicrophoneSlash } from "react-icons/fa";
-import SpeechRecognition, { useSpeechRecognition } from "react-speech-recognition";
+import SpeechRecognition, {
+  useSpeechRecognition,
+} from "react-speech-recognition";
 
 // Force dynamic rendering so Next.js doesn't try to statically pre-render this page
 export const dynamic = "force-dynamic";
@@ -17,7 +21,6 @@ export const dynamic = "force-dynamic";
 /* ------------------------------------------------------------------
   1. TYPE DEFINITIONS & SAMPLE DATA
 ------------------------------------------------------------------ */
-
 type OphthalmicItem = {
   name: string;
   rightDuration: string;
@@ -32,6 +35,87 @@ type SystemicItem = {
   duration: string;
   durationUnit: string;
   comments: string;
+};
+
+type AllergyItem = {
+  name: string;
+  duration: string;
+  durationUnit: string;
+  comments: string;
+};
+
+type FormData = {
+  // Patient Details
+  title: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  mobileNumber: string;
+  secondaryNumber: string;
+  email: string;
+  whatsappNumber: string;
+  sameAsContact?: boolean;
+  gender: string;
+  dob: string;
+  ageYears: string;
+  ageMonths: string;
+  relation: string;
+  patientType: string;
+  pincode: string;
+  state: string;
+  city: string;
+  area: string;
+  address1: string;
+  address2: string;
+  medicalRecordNo: string;
+  healthIdNo: string;
+  primaryLanguage: string;
+  secondaryLanguage: string;
+  patientReferralSource: string;
+
+  // Appointment
+  appointmentType: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  location: string;
+  consultant: string;
+  consultantFreeze?: boolean;
+  visitType: string;
+
+  // Other Details
+  patientImage?: string | null;
+  bloodGroup: string;
+  maritalStatus: string;
+  oneEyed: string;
+  emergencyContactName: string;
+  emergencyContactNumber: string;
+  aadharNo: string;
+  panNo: string;
+  dlNo: string;
+  gstNo: string;
+
+  // Histories
+  ophthalmicHistory: OphthalmicItem[];
+  systemicHistory: SystemicItem[];
+  medicalHistory: string;
+  familyHistory: string;
+  pediatricNutritionalStatus: string;
+  pediatricComments: string;
+  immunizationAssessment: string;
+
+  // Allergies
+  drugAllergies: {
+    [category: string]: AllergyItem[];
+  };
+  drugAllergiesComment: string;
+
+  contactAllergies: AllergyItem[];
+  contactAllergiesComment: string;
+
+  foodAllergies: AllergyItem[];
+  foodAllergiesComment: string;
+
+  otherAllergy: string;
 };
 
 const ALL_OPHTHALMIC_NAMES = [
@@ -81,13 +165,6 @@ const ALL_SYSTEMIC_NAMES = [
   "Rheumatoid Arthritis",
   "Benign Prostatic Hyperplasia(BPH)",
 ];
-
-type AllergyItem = {
-  name: string;
-  duration: string;
-  durationUnit: string;
-  comments: string;
-};
 
 const DRUG_CATEGORIES = [
   {
@@ -174,80 +251,7 @@ const FOOD_ALLERGIES_LIST = [
   "Mushroom",
 ];
 
-type FormData = {
-  // Patient Details
-  title: string;
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  mobileNumber: string;
-  secondaryNumber: string;
-  email: string;
-  whatsappNumber: string;
-  sameAsContact?: boolean;
-  gender: string;
-  dob: string;
-  ageYears: string;
-  ageMonths: string;
-  relation: string;
-  patientType: string;
-  pincode: string;
-  state: string;
-  city: string;
-  area: string;
-  address1: string;
-  address2: string;
-  medicalRecordNo: string;
-  healthIdNo: string;
-  primaryLanguage: string;
-  secondaryLanguage: string;
-  patientReferralSource: string;
-
-  // Appointment
-  appointmentType: string;
-  appointmentDate: string;
-  appointmentTime: string;
-  location: string;
-  consultant: string;
-  consultantFreeze?: boolean;
-  visitType: string;
-
-  // Other Details
-  patientImage?: string | null;
-  bloodGroup: string;
-  maritalStatus: string;
-  oneEyed: string;
-  emergencyContactName: string;
-  emergencyContactNumber: string;
-  aadharNo: string;
-  panNo: string;
-  dlNo: string;
-  gstNo: string;
-
-  // Histories
-  ophthalmicHistory: OphthalmicItem[];
-  systemicHistory: SystemicItem[];
-  medicalHistory: string;
-  familyHistory: string;
-  pediatricNutritionalStatus: string;
-  pediatricComments: string;
-  immunizationAssessment: string;
-
-  // Allergies
-  drugAllergies: {
-    [category: string]: AllergyItem[];
-  };
-  drugAllergiesComment: string;
-
-  contactAllergies: AllergyItem[];
-  contactAllergiesComment: string;
-
-  foodAllergies: AllergyItem[];
-  foodAllergiesComment: string;
-
-  otherAllergy: string;
-};
-
+// Default form values
 const defaultValues: FormData = {
   // Patient Details
   title: "Mr",
@@ -326,7 +330,6 @@ const defaultValues: FormData = {
 /* ------------------------------------------------------------------
   2. MAIN COMPONENT
 ------------------------------------------------------------------ */
-
 const PatientRegistration: NextPage = () => {
   const router = useRouter();
   const { register, handleSubmit, reset, watch, setValue } =
@@ -335,7 +338,7 @@ const PatientRegistration: NextPage = () => {
   // This will store the current record ID if we detect it in the query string.
   const [recordId, setRecordId] = useState<string | null>(null);
 
-  // We can load the ID from the query string in a client-side useEffect:
+  // We can load the ID from the query string in a client-side useEffect
   useEffect(() => {
     // Make sure window is defined (client-side).
     if (typeof window !== "undefined") {
@@ -365,7 +368,7 @@ const PatientRegistration: NextPage = () => {
       .catch((err) => console.error(err));
   }, [recordId, reset, clinicId]);
 
-  // -- On form submit
+  // On form submit
   const onSubmit = async (formValues: FormData) => {
     try {
       if (recordId) {
@@ -389,7 +392,7 @@ const PatientRegistration: NextPage = () => {
     }
   };
 
-  // -- Handle photo upload
+  // Handle photo upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -403,67 +406,144 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    3. SPEECH RECOGNITION COMMANDS & HANDLERS
+    3. ADVANCED SPEECH COMMANDS
   ------------------------------------------------------------------ */
+  // We define commands for each field. Additionally, we define commands
+  // for tab navigation, form submission, etc.
+  const goToNextTab = () =>
+    setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
+  const goToPreviousTab = () =>
+    setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
+
+  // Function to handle the advanced “ophthalmic select” command
+  const handleOphthalmicSelect = (
+    name: string,
+    rDur: string,
+    rUnit: string,
+    lDur: string,
+    lUnit: string
+  ) => {
+    // 1. Check if 'name' is already in the array; if not, add it
+    const ophArr = watch("ophthalmicHistory") || [];
+    let newArr = [...ophArr];
+    let idx = newArr.findIndex((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (idx === -1) {
+      // Add the item
+      newArr.push({
+        name,
+        rightDuration: "",
+        rightDurationUnit: "",
+        leftDuration: "",
+        leftDurationUnit: "",
+        comments: "",
+      });
+      idx = newArr.length - 1;
+    }
+
+    // 2. Set right duration and unit
+    newArr[idx] = {
+      ...newArr[idx],
+      rightDuration: rDur,
+      rightDurationUnit: convertUnit(rUnit), // Helper function below
+      leftDuration: lDur,
+      leftDurationUnit: convertUnit(lUnit),
+    };
+
+    setValue("ophthalmicHistory", newArr, { shouldDirty: true });
+    toast.success(
+      `Ophthalmic: ${name} (R: ${rDur} ${rUnit}, L: ${lDur} ${lUnit}) updated.`
+    );
+  };
+
+  // Quick helper to handle singular/plural: “month”/“months” -> “Months”, etc.
+  const convertUnit = (raw: string) => {
+    // just make sure we store either "Days", "Months", or "Years"
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("day")) return "Days";
+    if (lower.startsWith("month")) return "Months";
+    if (lower.startsWith("year")) return "Years";
+    return ""; // fallback
+  };
+
   const voiceCommands = [
+    // -----------------------------
+    // PATIENT DETAILS FIELDS
+    // -----------------------------
     {
-      command: "first name *",
-      callback: (name: string) => {
-        setValue("firstName", name.trim(), { shouldValidate: true });
-        toast.info("First Name set to: " + name);
+      // e.g. "first name John"
+      command: /first name (.*)/i,
+      callback: (value: string) => {
+        setValue("firstName", value.trim(), { shouldValidate: true });
+        toast.info("First Name set to: " + value);
       },
     },
     {
-      command: "last name *",
-      callback: (name: string) => {
-        setValue("lastName", name.trim(), { shouldValidate: true });
-        toast.info("Last Name set to: " + name);
+      command: /last name (.*)/i,
+      callback: (value: string) => {
+        setValue("lastName", value.trim(), { shouldValidate: true });
+        toast.info("Last Name set to: " + value);
       },
     },
     {
-      command: "mobile number *",
-      callback: (number: string) => {
-        const sanitized = number.replace(/\D/g, "");
+      command: /mobile number (.*)/i,
+      callback: (value: string) => {
+        // remove non-digits
+        const sanitized = value.replace(/\D/g, "");
         setValue("mobileNumber", sanitized, { shouldValidate: true });
         toast.info("Mobile Number set to: " + sanitized);
       },
     },
     {
-      command: "email *",
-      callback: (email: string) => {
-        setValue("email", email.trim(), { shouldValidate: true });
-        toast.info("Email set to: " + email);
+      // e.g. "email john doe at example dot com"
+      // We’ll at least remove spaces. The user can correct the domain as needed
+      command: /email (.*)/i,
+      callback: (rawEmail: string) => {
+        const sanitized = rawEmail.replaceAll(" ", "");
+        setValue("email", sanitized, { shouldValidate: true });
+        toast.info("Email set to: " + sanitized);
       },
     },
     {
-      command: "whatsapp number *",
-      callback: (num: string) => {
-        const sanitized = num.replace(/\D/g, "");
+      command: /whatsapp number (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/\D/g, "");
         setValue("whatsappNumber", sanitized, { shouldValidate: true });
         toast.info("WhatsApp Number set to: " + sanitized);
       },
     },
     {
-      command: "dob *",
-      callback: (dob: string) => {
-        setValue("dob", dob.trim(), { shouldValidate: true });
-        toast.info("DOB set to: " + dob);
+      command: /dob (.*)/i,
+      callback: (value: string) => {
+        // e.g. "dob 2000-01-15" or "dob 2000 dash 01 dash 15"
+        // up to you how fancy you want to parse
+        const sanitized = value.replace(/ dash /g, "-").replace(/ /g, "");
+        setValue("dob", sanitized, { shouldValidate: true });
+        toast.info("DOB set to: " + sanitized);
       },
     },
     {
-      command: "appointment date *",
-      callback: (date: string) => {
-        setValue("appointmentDate", date.trim(), { shouldValidate: true });
-        toast.info("Appointment Date set to: " + date);
+      command: /appointment date (.*)/i,
+      callback: (value: string) => {
+        const sanitized = value.replace(/ dash /g, "-").replace(/ /g, "");
+        setValue("appointmentDate", sanitized, { shouldValidate: true });
+        toast.info("Appointment Date set to: " + sanitized);
       },
     },
     {
-      command: "appointment time *",
-      callback: (time: string) => {
-        setValue("appointmentTime", time.trim(), { shouldValidate: true });
-        toast.info("Appointment Time set to: " + time);
+      command: /appointment time (.*)/i,
+      callback: (value: string) => {
+        // e.g. "appointment time 09 colon 30"
+        const sanitized = value
+          .replace(/ colon /g, ":")
+          .replace(/ /g, ""); // remove spaces
+        setValue("appointmentTime", sanitized, { shouldValidate: true });
+        toast.info("Appointment Time set to: " + sanitized);
       },
     },
+
+    // -----------------------------
+    // NAVIGATION BETWEEN TABS
+    // -----------------------------
     {
       command: "show patient details",
       callback: () => {
@@ -493,13 +573,61 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
-      command: "submit",
+      // user can say "next tab" to jump forward
+      command: "next tab",
+      callback: () => {
+        goToNextTab();
+        toast.info("Moved to next tab.");
+      },
+    },
+    {
+      // user can say "previous tab" to jump back
+      command: "previous tab",
+      callback: () => {
+        goToPreviousTab();
+        toast.info("Moved to previous tab.");
+      },
+    },
+
+    // -----------------------------
+    // OPHTHALMIC COMMAND (ADVANCED)
+    // e.g. "ophthalmic select Glass right duration 5 months left duration 3 months"
+    // or "ophthalmic select Cataract right duration 2 day left duration 3 days"
+    // -----------------------------
+    {
+      command:
+        /ophthalmic select ([a-zA-Z ]+) right duration (\d+) (days|day|months|month|years|year) left duration (\d+) (days|day|months|month|years|year)/i,
+      callback: (
+        conditionName: string,
+        rValue: string,
+        rUnit: string,
+        lValue: string,
+        lUnit: string
+      ) => {
+        handleOphthalmicSelect(conditionName, rValue, rUnit, lValue, lUnit);
+      },
+    },
+
+    // -----------------------------
+    // SAVE, BACK
+    // -----------------------------
+    {
+      // e.g. "submit" or "save form"
+      command: /(submit|save form)/i,
       callback: () => {
         handleSubmit(onSubmit)();
       },
     },
+    {
+      // e.g. "back" or "go back"
+      command: /(back|go back)/i,
+      callback: () => {
+        router.back();
+      },
+    },
   ];
 
+  // The below is from react-speech-recognition
   const {
     transcript,
     resetTranscript,
@@ -560,6 +688,7 @@ const PatientRegistration: NextPage = () => {
     <div className="flex flex-col md:flex-row gap-4 text-black">
       {/* Left side: Patient Info */}
       <div className="flex-1 p-4 bg-white shadow rounded space-y-4">
+        {/* Title, First Name, Middle Name, Last Name */}
         <div className="grid grid-cols-4 gap-2">
           <div>
             <label className="text-black">Title</label>
@@ -596,6 +725,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Mobile, Secondary */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Mobile Number*</label>
@@ -613,6 +743,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Email, WhatsApp */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Email</label>
@@ -637,6 +768,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Gender, DOB, Age, Relation */}
         <div className="grid grid-cols-5 gap-2">
           <div>
             <label className="text-black">Gender</label>
@@ -686,6 +818,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Patient Type, Pincode, State */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Patient Type</label>
@@ -714,6 +847,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* City, Area, Address1 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">City</label>
@@ -738,6 +872,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Address2, MRNo, HealthID */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Address 2</label>
@@ -762,6 +897,7 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
+        {/* Languages, referral */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Primary Language</label>
@@ -861,6 +997,7 @@ const PatientRegistration: NextPage = () => {
             Reserved Slot for {watch("appointmentDate") || "DD-MM-YYYY"}
           </h4>
           <div className="flex flex-wrap gap-2 mt-2">
+            {/* Demo of reserved vs free slots */}
             {["03:08", "03:09", "03:34", "04:00", "06:15"].map((slot) => (
               <span
                 key={slot}
@@ -1140,11 +1277,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.rightDuration}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "rightDuration",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "rightDuration", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1186,11 +1319,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.leftDuration}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "leftDuration",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "leftDuration", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1423,11 +1552,9 @@ const PatientRegistration: NextPage = () => {
         durationUnit: "",
         comments: "",
       };
-      setValue(
-        `drugAllergies.${category}`,
-        [...categoryList, newItem],
-        { shouldDirty: true }
-      );
+      setValue(`drugAllergies.${category}`, [...categoryList, newItem], {
+        shouldDirty: true,
+      });
     }
   };
 
@@ -1694,11 +1821,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.duration}
                           onChange={(e) =>
-                            updateContactField(
-                              item.name,
-                              "duration",
-                              e.target.value
-                            )
+                            updateContactField(item.name, "duration", e.target.value)
                           }
                         >
                           <option value="">Please Select</option>
@@ -1732,11 +1855,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1 w-full"
                           value={item.comments}
                           onChange={(e) =>
-                            updateContactField(
-                              item.name,
-                              "comments",
-                              e.target.value
-                            )
+                            updateContactField(item.name, "comments", e.target.value)
                           }
                         />
                       </td>
