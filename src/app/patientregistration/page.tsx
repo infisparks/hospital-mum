@@ -316,7 +316,7 @@ const defaultValues: FormData = {
     "Antimicrobial Agents": [],
     "Antifungal Agents": [],
     "Antiviral Agents": [],
-    "Nsaids": [],
+    Nsaids: [],
     "Eye Drops": [],
   },
   drugAllergiesComment: "",
@@ -331,9 +331,9 @@ const defaultValues: FormData = {
   Helper Functions for DOB Parsing and Age Calculation
 ------------------------------------------------------------------*/
 const parseSpokenDate = (spokenDate: string): string => {
-  // Remove any spaces before processing (e.g. "10 jan 2024" becomes "10jan2024")
+  // Remove any spaces before processing (e.g. "10 jan 2024" => "10jan2024")
   const cleaned = spokenDate.replace(/\s+/g, "");
-  // Expecting a format like "10jan2024"
+  // Expected format like "10jan2024" or "9dec1995"
   const monthMap: { [key: string]: string } = {
     jan: "01",
     feb: "02",
@@ -448,12 +448,18 @@ const PatientRegistration: NextPage = () => {
   };
 
   /* ------------------------------------------------------------------
-    3. ADVANCED SPEECH COMMANDS
+    3. ADVANCED SPEECH COMMANDS (with Fuzzy Matching)
   ------------------------------------------------------------------ */
-  const goToNextTab = () =>
-    setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
-  const goToPreviousTab = () =>
-    setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
+  const goToNextTab = () => setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
+  const goToPreviousTab = () => setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
+
+  const convertUnit = (raw: string) => {
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("day")) return "Days";
+    if (lower.startsWith("month")) return "Months";
+    if (lower.startsWith("year")) return "Years";
+    return "";
+  };
 
   const handleOphthalmicSelect = (
     name: string,
@@ -491,169 +497,206 @@ const PatientRegistration: NextPage = () => {
     );
   };
 
-  const convertUnit = (raw: string) => {
-    const lower = raw.toLowerCase();
-    if (lower.startsWith("day")) return "Days";
-    if (lower.startsWith("month")) return "Months";
-    if (lower.startsWith("year")) return "Years";
-    return "";
-  };
-
   // -----------------------------
-  // VOICE COMMANDS
+  // VOICE COMMANDS with fuzzyMatching
   // -----------------------------
   const voiceCommands = [
-    // Basic commands for patient fields
     {
-      command: /first name (.*)/i,
+      command: "first name *",
       callback: (value: string) => {
         setValue("firstName", value.trim(), { shouldValidate: true });
         toast.info("First Name set to: " + value);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /middle name (.*)/i,
+      command: "middle name *",
       callback: (value: string) => {
         setValue("middleName", value.trim(), { shouldValidate: true });
         toast.info("Middle Name set to: " + value);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /last name (.*)/i,
+      command: "last name *",
       callback: (value: string) => {
         setValue("lastName", value.trim(), { shouldValidate: true });
         toast.info("Last Name set to: " + value);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /mobile number (.*)/i,
+      command: "mobile number *",
       callback: (value: string) => {
         const sanitized = value.replace(/\D/g, "");
         setValue("mobileNumber", sanitized, { shouldValidate: true });
         toast.info("Mobile Number set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /second number (.*)/i,
+      command: "second number *",
       callback: (value: string) => {
         const sanitized = value.replace(/\D/g, "");
         setValue("secondaryNumber", sanitized, { shouldValidate: true });
         toast.info("Second Number set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /email (.*)/i,
+      command: "email *",
       callback: (rawEmail: string) => {
         const sanitized = rawEmail.replaceAll(" ", "");
         setValue("email", sanitized, { shouldValidate: true });
         toast.info("Email set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /whatsapp number (.*)/i,
+      command: "whatsapp number *",
       callback: (value: string) => {
         const sanitized = value.replace(/\D/g, "");
         setValue("whatsappNumber", sanitized, { shouldValidate: true });
         toast.info("WhatsApp Number set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // New command: Check Same as Contact Number
     {
-      command: /check same as contact number/i,
+      command: "check same as contact number",
       callback: () => {
         setValue("sameAsContact", true, { shouldValidate: true });
         const mobile = watch("mobileNumber");
         setValue("whatsappNumber", mobile, { shouldValidate: true });
         toast.info("Same as contact number checked and WhatsApp number updated.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // New command: Gender (with additional DOM click for visual selection)
     {
-      command: /gender (male|female|transgender)/i,
-      callback: (value: string) => {
+      command: "gender :gender",
+      callback: (gender: string) => {
+        // Convert to a proper capitalized form
         const formatted =
-          value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+          gender.charAt(0).toUpperCase() + gender.slice(1).toLowerCase();
+        if (
+          formatted !== "Male" &&
+          formatted !== "Female" &&
+          formatted !== "Transgender"
+        ) {
+          toast.error("Unrecognized gender: " + gender);
+          return;
+        }
         setValue("gender", formatted, { shouldValidate: true });
-        // Attempt to find and click the corresponding radio button
-        const radio = document.querySelector(
-          `input[name="gender"][value="${formatted}"]`
-        ) as HTMLInputElement;
+        // Attempt to check the corresponding radio button
+        const radioSelector = `input[name="gender"][value="${formatted}"]`;
+        const radio = document.querySelector(radioSelector) as HTMLInputElement;
         if (radio) {
           radio.checked = true;
         }
         toast.info("Gender set to: " + formatted);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // New command: DOB (remove spaces before parsing)
+    // For DOB, expects a format like "dob 10 jan 2024" or "dob 12 dec 1995"
     {
-      command: /dob (\d{1,2}\s*[a-zA-Z]{3}\s*\d{4})/i,
+      command: "dob *",
       callback: (spokenDob: string) => {
         const parsedDob = parseSpokenDate(spokenDob);
         if (parsedDob) {
           setValue("dob", parsedDob, { shouldValidate: true });
           toast.info("DOB set to: " + parsedDob);
+
+          // Also set Age
           const dobDate = new Date(parsedDob);
-          const age = calculateAge(dobDate);
-          setValue("ageYears", age.years.toString(), { shouldValidate: true });
-          setValue("ageMonths", age.months.toString(), { shouldValidate: true });
-          toast.info(`Age set to: ${age.years} years and ${age.months} months`);
+          const { years, months } = calculateAge(dobDate);
+          setValue("ageYears", years.toString(), { shouldValidate: true });
+          setValue("ageMonths", months.toString(), { shouldValidate: true });
+          toast.info(
+            `Age set to: ${years} years and ${months} months (from DOB).`
+          );
         } else {
           toast.error("Failed to parse the spoken DOB.");
         }
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /appointment date (.*)/i,
+      command: "appointment date *",
       callback: (value: string) => {
-        const sanitized = value.replace(/ dash /g, "-").replace(/ /g, "");
+        // e.g. "12-05-2024" or "12 05 2024"
+        const sanitized = value
+          .replace(/ dash /g, "-")
+          .replace(/ /g, "-")
+          .replace(/--/g, "-");
         setValue("appointmentDate", sanitized, { shouldValidate: true });
         toast.info("Appointment Date set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /appointment time (.*)/i,
+      command: "appointment time *",
       callback: (value: string) => {
-        const sanitized = value.replace(/ colon /g, ":").replace(/ /g, "");
+        // e.g. "10 30" => "10:30"
+        const sanitized = value.replace(/ colon /g, ":").replace(/ /g, ":");
         setValue("appointmentTime", sanitized, { shouldValidate: true });
         toast.info("Appointment Time set to: " + sanitized);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // New command: Relationship
     {
-      command: /relationship (.*)/i,
+      command: "relationship *",
       callback: (value: string) => {
         setValue("relation", value.trim(), { shouldValidate: true });
         toast.info("Relationship set to: " + value);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // New command: Patient Type (New or Old)
     {
-      command: /patient (new|old)/i,
+      command: "patient :type",
       callback: (value: string) => {
         const type = value.toLowerCase() === "new" ? "New" : "Old";
         setValue("patientType", type, { shouldValidate: true });
         toast.info("Patient type set to: " + type);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // -----------------------------
-    // FUZZY MATCHING FOR TYPOS (for example, "fist name" instead of "first name")
-    // -----------------------------
-    {
-      command: /fist name (.*)/i,
-      callback: (value: string) => {
-        setValue("firstName", value.trim(), { shouldValidate: true });
-        toast.info("Fuzzy First Name set to: " + value);
-      },
-    },
-    // -----------------------------
-    // NAVIGATION BETWEEN TABS
-    // -----------------------------
+    // NAVIGATION
     {
       command: "show patient details",
       callback: () => {
         setTabIndex(0);
         toast.info("Switched to Patient Details tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
       command: "show other details",
@@ -661,6 +704,9 @@ const PatientRegistration: NextPage = () => {
         setTabIndex(1);
         toast.info("Switched to Other Details tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
       command: "show history",
@@ -668,6 +714,9 @@ const PatientRegistration: NextPage = () => {
         setTabIndex(2);
         toast.info("Switched to History tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
       command: "show allergies",
@@ -675,6 +724,9 @@ const PatientRegistration: NextPage = () => {
         setTabIndex(3);
         toast.info("Switched to Allergies tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
       command: "next tab",
@@ -682,6 +734,9 @@ const PatientRegistration: NextPage = () => {
         goToNextTab();
         toast.info("Moved to next tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
       command: "previous tab",
@@ -689,37 +744,45 @@ const PatientRegistration: NextPage = () => {
         goToPreviousTab();
         toast.info("Moved to previous tab.");
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
-    // -----------------------------
-    // OPHTHALMIC COMMAND (ADVANCED)
-    // -----------------------------
+    // OPHTHALMIC SELECT (ADVANCED)
     {
+      // e.g. "ophthalmic select Cataract right duration 3 years left duration 2 years"
       command:
-        /ophthalmic select ([a-zA-Z ]+) right duration (\d+) (days|day|months|month|years|year) left duration (\d+) (days|day|months|month|years|year)/i,
-      callback: (
-        conditionName: string,
-        rValue: string,
-        rUnit: string,
-        lValue: string,
-        lUnit: string
-      ) => {
-        handleOphthalmicSelect(conditionName, rValue, rUnit, lValue, lUnit);
+        "ophthalmic select * right duration :rDur :rUnit left duration :lDur :lUnit",
+      callback: (conditionName, rDur, rUnit, lDur, lUnit) => {
+        handleOphthalmicSelect(conditionName, rDur, rUnit, lDur, lUnit);
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.75,
+      bestMatchOnly: true,
     },
-    // -----------------------------
-    // SAVE, BACK
-    // -----------------------------
+    // SAVE / BACK
     {
-      command: /(submit|save form)/i,
-      callback: () => {
-        handleSubmit(onSubmit)();
-      },
+      command: "submit",
+      callback: () => handleSubmit(onSubmit)(),
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
     {
-      command: /(back|go back)/i,
+      command: "save form",
+      callback: () => handleSubmit(onSubmit)(),
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
+    },
+    {
+      command: "back",
       callback: () => {
         router.back();
       },
+      isFuzzyMatch: true,
+      fuzzyMatchingThreshold: 0.8,
+      bestMatchOnly: true,
     },
   ];
 
@@ -1361,7 +1424,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.rightDuration}
                           onChange={(e) =>
-                            updateOphField(item.name, "rightDuration", e.target.value)
+                            updateOphField(
+                              item.name,
+                              "rightDuration",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Select</option>
@@ -1376,7 +1443,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.rightDurationUnit}
                           onChange={(e) =>
-                            updateOphField(item.name, "rightDurationUnit", e.target.value)
+                            updateOphField(
+                              item.name,
+                              "rightDurationUnit",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Select</option>
@@ -1399,7 +1470,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.leftDuration}
                           onChange={(e) =>
-                            updateOphField(item.name, "leftDuration", e.target.value)
+                            updateOphField(
+                              item.name,
+                              "leftDuration",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Select</option>
@@ -1414,7 +1489,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.leftDurationUnit}
                           onChange={(e) =>
-                            updateOphField(item.name, "leftDurationUnit", e.target.value)
+                            updateOphField(
+                              item.name,
+                              "leftDurationUnit",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Select</option>
@@ -1429,7 +1508,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1 w-full"
                           value={item.comments}
                           onChange={(e) =>
-                            updateOphField(item.name, "comments", e.target.value)
+                            updateOphField(
+                              item.name,
+                              "comments",
+                              e.target.value
+                            )
                           }
                         />
                       </td>
@@ -1494,7 +1577,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateSysField(item.name, "durationUnit", e.target.value)
+                            updateSysField(
+                              item.name,
+                              "durationUnit",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Select</option>
@@ -1883,7 +1970,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.duration}
                           onChange={(e) =>
-                            updateContactField(item.name, "duration", e.target.value)
+                            updateContactField(
+                              item.name,
+                              "duration",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Please Select</option>
@@ -1898,7 +1989,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateContactField(item.name, "durationUnit", e.target.value)
+                            updateContactField(
+                              item.name,
+                              "durationUnit",
+                              e.target.value
+                            )
                           }
                         >
                           <option value="">Please Select</option>
@@ -1913,7 +2008,11 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1 w-full"
                           value={item.comments}
                           onChange={(e) =>
-                            updateContactField(item.name, "comments", e.target.value)
+                            updateContactField(
+                              item.name,
+                              "comments",
+                              e.target.value
+                            )
                           }
                         />
                       </td>
