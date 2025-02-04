@@ -752,10 +752,16 @@ const PatientRegistration: NextPage = () => {
     {
       // e.g. "ophthalmic select Cataract right duration 3 years left duration 2 years"
       command:
-        "ophthalmic select * right duration :rDur :rUnit left duration :lDur :lUnit",
-      callback: (conditionName, rDur, rUnit, lDur, lUnit) => {
-        handleOphthalmicSelect(conditionName, rDur, rUnit, lDur, lUnit);
-      },
+      "ophthalmic select * right duration :rDur :rUnit left duration :lDur :lUnit",
+    callback: (
+      conditionName: string,
+      rDur: string,
+      rUnit: string,
+      lDur: string,
+      lUnit: string
+    ) => {
+      handleOphthalmicSelect(conditionName, rDur, rUnit, lDur, lUnit);
+    },
       isFuzzyMatch: true,
       fuzzyMatchingThreshold: 0.75,
       bestMatchOnly: true,
