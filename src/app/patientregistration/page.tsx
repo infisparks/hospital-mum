@@ -331,6 +331,8 @@ const defaultValues: FormData = {
   Helper Functions for DOB Parsing and Age Calculation
 ------------------------------------------------------------------*/
 const parseSpokenDate = (spokenDate: string): string => {
+  // Remove any spaces before processing (e.g. "10 jan 2024" becomes "10jan2024")
+  const cleaned = spokenDate.replace(/\s+/g, "");
   // Expecting a format like "10jan2024"
   const monthMap: { [key: string]: string } = {
     jan: "01",
@@ -346,7 +348,7 @@ const parseSpokenDate = (spokenDate: string): string => {
     nov: "11",
     dec: "12",
   };
-  const match = spokenDate.match(/(\d{1,2})([a-zA-Z]{3})(\d{4})/);
+  const match = cleaned.match(/(\d{1,2})([a-zA-Z]{3})(\d{4})/);
   if (match) {
     const day = match[1].padStart(2, "0");
     const monStr = match[2].toLowerCase();
@@ -383,7 +385,6 @@ const PatientRegistration: NextPage = () => {
 
   // We can load the ID from the query string in a client-side useEffect
   useEffect(() => {
-    // Make sure window is defined (client-side).
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const idFromQuery = params.get("id");
@@ -415,14 +416,12 @@ const PatientRegistration: NextPage = () => {
   const onSubmit = async (formValues: FormData) => {
     try {
       if (recordId) {
-        // If we have a recordId, we are updating
         await set(
           ref(db, `clinic/${clinicId}/patientdetail/${recordId}`),
           formValues
         );
         alert("Updated existing patient: " + recordId);
       } else {
-        // Otherwise, we are creating a new entry
         const newRef = push(ref(db, `clinic/${clinicId}/patientdetail`));
         await set(newRef, formValues);
         alert("New patient created with id: " + newRef.key);
@@ -451,13 +450,11 @@ const PatientRegistration: NextPage = () => {
   /* ------------------------------------------------------------------
     3. ADVANCED SPEECH COMMANDS
   ------------------------------------------------------------------ */
-  // Navigation helper functions for tabs
   const goToNextTab = () =>
     setTabIndex((prev) => (prev < 3 ? prev + 1 : 3));
   const goToPreviousTab = () =>
     setTabIndex((prev) => (prev > 0 ? prev - 1 : 0));
 
-  // Function to handle the advanced “ophthalmic select” command
   const handleOphthalmicSelect = (
     name: string,
     rDur: string,
@@ -465,14 +462,12 @@ const PatientRegistration: NextPage = () => {
     lDur: string,
     lUnit: string
   ) => {
-    // 1. Check if 'name' is already in the array; if not, add it
     const ophArr = watch("ophthalmicHistory") || [];
     const newArr = [...ophArr];
     let idx = newArr.findIndex(
       (x) => x.name.toLowerCase() === name.toLowerCase()
     );
     if (idx === -1) {
-      // Add the item
       newArr.push({
         name,
         rightDuration: "",
@@ -483,23 +478,19 @@ const PatientRegistration: NextPage = () => {
       });
       idx = newArr.length - 1;
     }
-
-    // 2. Set right duration and unit
     newArr[idx] = {
       ...newArr[idx],
       rightDuration: rDur,
-      rightDurationUnit: convertUnit(rUnit), // Helper function below
+      rightDurationUnit: convertUnit(rUnit),
       leftDuration: lDur,
       leftDurationUnit: convertUnit(lUnit),
     };
-
     setValue("ophthalmicHistory", newArr, { shouldDirty: true });
     toast.success(
       `Ophthalmic: ${name} (R: ${rDur} ${rUnit}, L: ${lDur} ${lUnit}) updated.`
     );
   };
 
-  // Quick helper to handle singular/plural: “day”/“days” etc.
   const convertUnit = (raw: string) => {
     const lower = raw.toLowerCase();
     if (lower.startsWith("day")) return "Days";
@@ -508,13 +499,12 @@ const PatientRegistration: NextPage = () => {
     return "";
   };
 
-  // New voice commands added below:
+  // -----------------------------
+  // VOICE COMMANDS
+  // -----------------------------
   const voiceCommands = [
-    // -----------------------------
-    // PATIENT DETAILS FIELDS
-    // -----------------------------
+    // Basic commands for patient fields
     {
-      // e.g. "first name John"
       command: /first name (.*)/i,
       callback: (value: string) => {
         setValue("firstName", value.trim(), { shouldValidate: true });
@@ -522,7 +512,6 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
-      // e.g. "middle name Jane"
       command: /middle name (.*)/i,
       callback: (value: string) => {
         setValue("middleName", value.trim(), { shouldValidate: true });
@@ -568,32 +557,41 @@ const PatientRegistration: NextPage = () => {
         toast.info("WhatsApp Number set to: " + sanitized);
       },
     },
-    // New command: Same as contact number
+    // New command: Check Same as Contact Number
     {
-      command: /same as contact number/i,
+      command: /check same as contact number/i,
       callback: () => {
         setValue("sameAsContact", true, { shouldValidate: true });
-        toast.info("Same as contact number checked.");
+        const mobile = watch("mobileNumber");
+        setValue("whatsappNumber", mobile, { shouldValidate: true });
+        toast.info("Same as contact number checked and WhatsApp number updated.");
       },
     },
-    // New command: Gender selection (male, female, or transgender)
+    // New command: Gender (with additional DOM click for visual selection)
     {
       command: /gender (male|female|transgender)/i,
       callback: (value: string) => {
-        const formatted = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+        const formatted =
+          value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
         setValue("gender", formatted, { shouldValidate: true });
+        // Attempt to find and click the corresponding radio button
+        const radio = document.querySelector(
+          `input[name="gender"][value="${formatted}"]`
+        ) as HTMLInputElement;
+        if (radio) {
+          radio.checked = true;
+        }
         toast.info("Gender set to: " + formatted);
       },
     },
-    // New command: DOB in spoken format e.g. "dob 10jan2024"
+    // New command: DOB (remove spaces before parsing)
     {
-      command: /dob (\d{1,2}[a-zA-Z]{3}\d{4})/i,
+      command: /dob (\d{1,2}\s*[a-zA-Z]{3}\s*\d{4})/i,
       callback: (spokenDob: string) => {
         const parsedDob = parseSpokenDate(spokenDob);
         if (parsedDob) {
           setValue("dob", parsedDob, { shouldValidate: true });
           toast.info("DOB set to: " + parsedDob);
-          // Calculate age based on parsed DOB
           const dobDate = new Date(parsedDob);
           const age = calculateAge(dobDate);
           setValue("ageYears", age.years.toString(), { shouldValidate: true });
@@ -615,9 +613,7 @@ const PatientRegistration: NextPage = () => {
     {
       command: /appointment time (.*)/i,
       callback: (value: string) => {
-        const sanitized = value
-          .replace(/ colon /g, ":")
-          .replace(/ /g, "");
+        const sanitized = value.replace(/ colon /g, ":").replace(/ /g, "");
         setValue("appointmentTime", sanitized, { shouldValidate: true });
         toast.info("Appointment Time set to: " + sanitized);
       },
@@ -637,6 +633,16 @@ const PatientRegistration: NextPage = () => {
         const type = value.toLowerCase() === "new" ? "New" : "Old";
         setValue("patientType", type, { shouldValidate: true });
         toast.info("Patient type set to: " + type);
+      },
+    },
+    // -----------------------------
+    // FUZZY MATCHING FOR TYPOS (for example, "fist name" instead of "first name")
+    // -----------------------------
+    {
+      command: /fist name (.*)/i,
+      callback: (value: string) => {
+        setValue("firstName", value.trim(), { shouldValidate: true });
+        toast.info("Fuzzy First Name set to: " + value);
       },
     },
     // -----------------------------
@@ -777,7 +783,6 @@ const PatientRegistration: NextPage = () => {
     <div className="flex flex-col md:flex-row gap-4 text-black">
       {/* Left side: Patient Info */}
       <div className="flex-1 p-4 bg-white shadow rounded space-y-4">
-        {/* Title, First Name, Middle Name, Last Name */}
         <div className="grid grid-cols-4 gap-2">
           <div>
             <label className="text-black">Title</label>
@@ -814,7 +819,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Mobile, Secondary */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Mobile Number*</label>
@@ -832,7 +836,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Email, WhatsApp */}
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-black">Email</label>
@@ -857,7 +860,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Gender, DOB, Age, Relation */}
         <div className="grid grid-cols-5 gap-2">
           <div>
             <label className="text-black">Gender</label>
@@ -907,7 +909,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Patient Type, Pincode, State */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Patient Type</label>
@@ -936,7 +937,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* City, Area, Address1 */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">City</label>
@@ -961,7 +961,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Address2, MRNo, HealthID */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Address 2</label>
@@ -986,7 +985,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Languages, referral */}
         <div className="grid grid-cols-3 gap-2">
           <div>
             <label className="text-black">Primary Language</label>
@@ -1244,7 +1242,6 @@ const PatientRegistration: NextPage = () => {
     const ophArr = watch("ophthalmicHistory") || [];
     const sysArr = watch("systemicHistory") || [];
 
-    // Toggle an ophthalmic condition
     const toggleOph = (name: string) => {
       const idx = ophArr.findIndex((x) => x.name === name);
       if (idx >= 0) {
@@ -1289,7 +1286,6 @@ const PatientRegistration: NextPage = () => {
       }
     };
 
-    // Toggle a systemic condition
     const toggleSys = (name: string) => {
       const idx = sysArr.findIndex((x) => x.name === name);
       if (idx >= 0) {
@@ -1380,11 +1376,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.rightDurationUnit}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "rightDurationUnit",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "rightDurationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1422,11 +1414,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.leftDurationUnit}
                           onChange={(e) =>
-                            updateOphField(
-                              item.name,
-                              "leftDurationUnit",
-                              e.target.value
-                            )
+                            updateOphField(item.name, "leftDurationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1506,11 +1494,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateSysField(
-                              item.name,
-                              "durationUnit",
-                              e.target.value
-                            )
+                            updateSysField(item.name, "durationUnit", e.target.value)
                           }
                         >
                           <option value="">Select</option>
@@ -1537,7 +1521,6 @@ const PatientRegistration: NextPage = () => {
           )}
         </div>
 
-        {/* Additional text fields */}
         <div className="grid grid-cols-2 gap-4 mt-4">
           <div>
             <label className="text-black">Medical History</label>
@@ -1555,7 +1538,6 @@ const PatientRegistration: NextPage = () => {
           </div>
         </div>
 
-        {/* Pediatric */}
         <div className="mt-4">
           <h3 className="font-semibold text-black">Pediatric History</h3>
           <div className="flex gap-4 mt-2">
@@ -1664,7 +1646,6 @@ const PatientRegistration: NextPage = () => {
     }
   };
 
-  // Contact allergies
   const contactArr = watch("contactAllergies") || [];
   const toggleContact = (itemName: string) => {
     const idx = contactArr.findIndex((x: AllergyItem) => x.name === itemName);
@@ -1698,7 +1679,6 @@ const PatientRegistration: NextPage = () => {
     }
   };
 
-  // Food allergies
   const foodArr = watch("foodAllergies") || [];
   const toggleFood = (itemName: string) => {
     const idx = foodArr.findIndex((x: AllergyItem) => x.name === itemName);
@@ -1738,10 +1718,8 @@ const PatientRegistration: NextPage = () => {
 
     return (
       <div className="bg-white p-4 rounded shadow space-y-4 text-black">
-        {/* DRUG ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Drug (Allergies)</h3>
-          {/* Category tabs */}
           <div className="flex gap-2 mb-2">
             {DRUG_CATEGORIES.map((cat) => (
               <button
@@ -1759,7 +1737,6 @@ const PatientRegistration: NextPage = () => {
             ))}
           </div>
 
-          {/* Pills for the current category */}
           <div className="flex flex-wrap gap-2 mb-2">
             {DRUG_CATEGORIES.find((c) => c.category === activeDrugCategory)?.items.map(
               (itemName) => {
@@ -1782,7 +1759,6 @@ const PatientRegistration: NextPage = () => {
             )}
           </div>
 
-          {/* Table of selected items */}
           {activeList.length > 0 && (
             <div className="overflow-auto">
               <table className="min-w-full text-black border">
@@ -1866,7 +1842,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* CONTACT ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Contact (Allergies)</h3>
           <div className="flex flex-wrap gap-2 mb-2">
@@ -1923,11 +1898,7 @@ const PatientRegistration: NextPage = () => {
                           className="border p-1"
                           value={item.durationUnit}
                           onChange={(e) =>
-                            updateContactField(
-                              item.name,
-                              "durationUnit",
-                              e.target.value
-                            )
+                            updateContactField(item.name, "durationUnit", e.target.value)
                           }
                         >
                           <option value="">Please Select</option>
@@ -1959,7 +1930,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* FOOD ALLERGIES */}
         <div>
           <h3 className="font-semibold text-black mb-2">Food (Allergies)</h3>
           <div className="flex flex-wrap gap-2 mb-2">
@@ -2052,7 +2022,6 @@ const PatientRegistration: NextPage = () => {
           />
         </div>
 
-        {/* Other Allergy */}
         <div>
           <label className="font-semibold text-black">Other Allergy</label>
           <input
