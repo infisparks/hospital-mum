@@ -529,6 +529,54 @@ const PatientRegistration: NextPage = () => {
       },
     },
     {
+        command: /pincode (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("pincode", sanitized, { shouldValidate: true });
+          toast.info("pincode set to: " + sanitized);
+        },
+      },
+      {
+        command: /state (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("state", sanitized, { shouldValidate: true });
+          toast.info("state set to: " + sanitized);
+        },
+      },
+      {
+        command: /address (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("address1", sanitized, { shouldValidate: true });
+          toast.info("address1 set to: " + sanitized);
+        },
+      },
+      {
+        command: /primary language (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("primaryLanguage", sanitized, { shouldValidate: true });
+          toast.info("primary language set to: " + sanitized);
+        },
+      },
+      {
+        command: /secondary language (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("secondaryLanguage", sanitized, { shouldValidate: true });
+          toast.info("secondary language set to: " + sanitized);
+        },
+      },
+      {
+        command: /refer (.*)/i,
+        callback: (value: string) => {
+          const sanitized = value.replace(/\D/g, "");
+          setValue("patientReferralSource", sanitized, { shouldValidate: true });
+          toast.info("patientReferralSource set to: " + sanitized);
+        },
+      },
+    {
       command: /dob (.*)/i,
       callback: (value: string) => {
         // e.g. "dob 2000-01-15" or "dob 2000 dash 01 dash 15"
@@ -562,28 +610,28 @@ const PatientRegistration: NextPage = () => {
     // NAVIGATION BETWEEN TABS
     // -----------------------------
     {
-      command: "show patient details",
+      command: "patient details",
       callback: () => {
         setTabIndex(0);
         toast.info("Switched to Patient Details tab.");
       },
     },
     {
-      command: "show other details",
+      command: "other details",
       callback: () => {
         setTabIndex(1);
         toast.info("Switched to Other Details tab.");
       },
     },
     {
-      command: "show history",
+      command: "history",
       callback: () => {
         setTabIndex(2);
         toast.info("Switched to History tab.");
       },
     },
     {
-      command: "show allergies",
+      command: "allergies",
       callback: () => {
         setTabIndex(3);
         toast.info("Switched to Allergies tab.");
@@ -591,7 +639,7 @@ const PatientRegistration: NextPage = () => {
     },
     {
       // user can say "next tab" to jump forward
-      command: "next tab",
+      command: "next",
       callback: () => {
         goToNextTab();
         toast.info("Moved to next tab.");
@@ -599,7 +647,7 @@ const PatientRegistration: NextPage = () => {
     },
     {
       // user can say "previous tab" to jump back
-      command: "previous tab",
+      command: "back",
       callback: () => {
         goToPreviousTab();
         toast.info("Moved to previous tab.");
