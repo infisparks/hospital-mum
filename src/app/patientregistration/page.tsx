@@ -616,7 +616,7 @@ const PatientRegistration: NextPage = () => {
     },
     // For DOB, expects a format like "dob 10 jan 2024" or "dob 12 dec 1995"
     {
-      command: "dob *",
+      command: "date of birth *",
       callback: (spokenDob: string) => {
         const parsedDob = parseSpokenDate(spokenDob);
         if (parsedDob) {
@@ -689,7 +689,7 @@ const PatientRegistration: NextPage = () => {
     },
     // NAVIGATION
     {
-      command: "show patient details",
+      command: "patient details",
       callback: () => {
         setTabIndex(0);
         toast.info("Switched to Patient Details tab.");
@@ -699,7 +699,7 @@ const PatientRegistration: NextPage = () => {
       bestMatchOnly: true,
     },
     {
-      command: "show other details",
+      command: "other details",
       callback: () => {
         setTabIndex(1);
         toast.info("Switched to Other Details tab.");
@@ -709,7 +709,7 @@ const PatientRegistration: NextPage = () => {
       bestMatchOnly: true,
     },
     {
-      command: "show history",
+      command: "history",
       callback: () => {
         setTabIndex(2);
         toast.info("Switched to History tab.");
@@ -719,7 +719,7 @@ const PatientRegistration: NextPage = () => {
       bestMatchOnly: true,
     },
     {
-      command: "show allergies",
+      command: "allergies",
       callback: () => {
         setTabIndex(3);
         toast.info("Switched to Allergies tab.");
@@ -729,7 +729,7 @@ const PatientRegistration: NextPage = () => {
       bestMatchOnly: true,
     },
     {
-      command: "next tab",
+      command: "next",
       callback: () => {
         goToNextTab();
         toast.info("Moved to next tab.");
@@ -739,7 +739,7 @@ const PatientRegistration: NextPage = () => {
       bestMatchOnly: true,
     },
     {
-      command: "previous tab",
+      command: "back",
       callback: () => {
         goToPreviousTab();
         toast.info("Moved to previous tab.");
